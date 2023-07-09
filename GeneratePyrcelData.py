@@ -101,10 +101,7 @@ def save_data(result_df):
             )
             break
 
-
-def generate_data(num_simulations):
-    result_df = pd.DataFrame()
-
+def sample_parameters(num_simulations):
     param_bounds = [
         (1, 4),  # log10(mode_N)
         (-3, 1),  # log10(mode_mean)
@@ -119,8 +116,13 @@ def generate_data(num_simulations):
     sample = sampler.random(n=num_simulations)
     l_bounds = [b[0] for b in param_bounds]
     u_bounds = [b[1] for b in param_bounds]
-    scaled = qmc.scale(sample, l_bounds, u_bounds)
-    for i in range(num_simulations):
+    result = qmc.scale(sample, l_bounds, u_bounds)
+    return result
+
+def generate_data(parameters):
+    result_df = pd.DataFrame()
+    
+    for i in range(len(parameters)):
         print(
             f"{threading.current_thread().name}: Simulation {i + 1} / {num_simulations}"
         )
@@ -133,7 +135,7 @@ def generate_data(num_simulations):
             initial_temperature,
             initial_pressure,
             mac,
-        ) = scaled[i]
+        ) = parameters[i]
         try:
             simulation_df = generate_data_one_simulation(
                 mode_N=10**log_mode_N * si.cm**-3,
@@ -158,14 +160,13 @@ def generate_data(num_simulations):
     save_data(result_df)
 
 
-simulations_per_thread = [
-    num_simulations // num_threads + (1 if i < num_simulations % num_threads else 0)
-    for i in range(num_threads)
-]
+parameters = sample_parameters(num_simulations)
+
+parameters_by_thread = np.array_split(parameters, num_threads)
 
 threads = [
     threading.Thread(
-        target=generate_data, args=(simulations_per_thread[i],), name=f"Thread {i + 1}"
+        target=generate_data, args=(parameters_by_thread[i],), name=f"Thread {i + 1}"
     )
     for i in range(num_threads)
 ]

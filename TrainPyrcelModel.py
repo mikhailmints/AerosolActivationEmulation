@@ -3,12 +3,40 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 import matplotlib.pyplot as plt
 
-train_dataset_filename = "datasets/dataset3.csv"
 
-df = pd.read_csv(train_dataset_filename)
+def get_one_datapoint(df, simulation_id):
+    df = df[df["simulation_id"] == simulation_id]
+    if df.size == 0:
+        return df
+    return df.sample(1)
+
+
+dataset_filename = "datasets/dataset1.csv"
+
+df = pd.read_csv(dataset_filename)
+
+num_simulations = max(df["simulation_id"]) + 1
+
+df = pd.concat([get_one_datapoint(df, i) for i in range(num_simulations)])
+
+df[["mode_N", "mode_mean", "velocity"]] = df[["mode_N", "mode_mean", "velocity"]].apply(
+    np.log10
+)
 
 X = np.array(
-    df[["mode_N", "mode_mean", "mode_kappa", "velocity", "mac", "RH", "T", "p"]]
+    df[
+        [
+            "mode_N",
+            "mode_mean",
+            "mode_kappa",
+            "velocity",
+            "mac",
+            "qv",
+            "RH",
+            "T",
+            "p",
+        ]
+    ]
 )
 Y = np.array(df["act_frac"])
 
@@ -21,6 +49,10 @@ x_std = np.std(X, axis=0)
 
 X = (X - x_mean) / x_std
 
+perm = np.random.permutation(len(X))
+X = X[perm]
+Y = Y[perm]
+
 train_size = int(len(X) * 0.8)
 
 X_train = X[:train_size]
@@ -28,8 +60,13 @@ Y_train = Y[:train_size]
 X_test = X[train_size:]
 Y_test = Y[train_size:]
 
-regr = GradientBoostingRegressor(learning_rate=1, max_depth=4)
+regr = GradientBoostingRegressor(
+    learning_rate=0.5, n_estimators=50, max_depth=5, n_iter_no_change=20
+)
 regr.fit(X_train, Y_train)
+
+r2 = regr.score(X_test, Y_test)
+print(f"R^2 = {r2}")
 
 
 def plot_accuracy_scatterplot(X, Y, ax):

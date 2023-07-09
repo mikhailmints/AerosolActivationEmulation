@@ -7,6 +7,7 @@ from PySDM_examples.utils import BasicSimulation
 
 import PySDM
 from PySDM import Builder
+from PySDM import products as PySDM_products
 from PySDM.backends import CPU
 from PySDM.backends.impl_numba.test_helpers import scipy_ode_condensation_solver
 from PySDM.dynamics import AmbientThermodynamics, Condensation
@@ -62,14 +63,15 @@ class MyPyrcelSimulation:
         attributes["volume"] = settings.formulae.trivia.volume(radius=r_wet)
 
         products = (
-            PySDM.products.AmbientRelativeHumidity(name="RH"),
-            PySDM.products.AmbientTemperature(name="T"),
-            PySDM.products.AmbientPressure(name="p"),
-            PySDM.products.AmbientWaterVapourMixingRatio(name="qv"),
-            PySDM.products.WaterMixingRatio(name="qc"),
-            PySDM.products.PeakSupersaturation(name="S_max", unit="%"),
-            PySDM.products.ActivableFraction(name="act_frac"),
-            PySDM.products.ActivatingRate(name="act_rate"),
+            PySDM_products.Time(name="time"),
+            PySDM_products.AmbientRelativeHumidity(name="RH"),
+            PySDM_products.AmbientTemperature(name="T"),
+            PySDM_products.AmbientPressure(name="p"),
+            PySDM_products.AmbientWaterVapourMixingRatio(name="qv"),
+            PySDM_products.WaterMixingRatio(name="qc"),
+            PySDM_products.PeakSupersaturation(name="S_max", unit="%"),
+            PySDM_products.ActivableFraction(name="act_frac"),
+            PySDM_products.ActivatingRate(name="act_rate"),
         )
 
         self.particulator = builder.build(attributes=attributes, products=products)
