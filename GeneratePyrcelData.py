@@ -1,41 +1,35 @@
 import numpy as np
-import pickle
 import os
-import sys
+import time
+import argparse
+import pandas as pd
+import threading
 from PySDM import Formulae
 from MyPyrcelSimulation import MyPyrcelSimulation
 from MyPyrcelSettings import MyPyrcelSettings
 from PySDM.physics import si
 from PySDM.initialisation.spectra import Lognormal
 from scipy.stats import qmc
-import matplotlib.pyplot as plt
 
 
 N_SD = 1000
 DT_PARCEL = 0.1 * si.s
 T_MAX_PARCEL = 100 * si.s
 
-SAVE_PERIOD = 10
+SAVE_PERIOD = 5
 
-out_filename = "datasets/" + sys.argv[1]
-num_simulations = int(sys.argv[2])
+parser = argparse.ArgumentParser()
+parser.add_argument("out_filename")
+parser.add_argument("--num_simulations", default=1)
+parser.add_argument("--num_threads", default=1)
 
-prev_contents = None
+args = parser.parse_args()
 
-if os.path.exists(out_filename):
-    while True:
-        choice = input(
-            "File already exists. (O)verwrite previous contents, \
-(A)dd to previous contents, or (C)ancel? "
-        )
-        if choice == "O":
-            break
-        elif choice == "A":
-            with open(out_filename, "rb") as prev_file:
-                prev_contents = pickle.load(prev_file)
-            break
-        elif choice == "C":
-            exit(0)
+out_filename = "datasets/" + args.out_filename
+num_simulations = int(args.num_simulations)
+num_threads = int(args.num_threads)
+
+file_lock = threading.Lock()
 
 
 def generate_data_one_simulation(
@@ -48,6 +42,7 @@ def generate_data_one_simulation(
     initial_pressure,
     mac,
 ):
+    initial_params = locals()
 
     settings = MyPyrcelSettings(
         dt=DT_PARCEL,
@@ -68,50 +63,48 @@ def generate_data_one_simulation(
     simulation = MyPyrcelSimulation(settings)
     results = simulation.run()
     products = results["products"]
+    n_rows = len(list(products.values())[0])
 
-    Y = np.array(products["act_frac"])
-    X = np.array(
-        [
-            [
-                np.log(mode_N),
-                np.log(mode_mean),
-                mode_stdev,
-                mode_kappa,
-                np.log(velocity),
-                mac,
-                products["T"][i],
-                products["p"][i],
-                products["RH"][i],
-            ]
-            for i in range(len(Y))
-        ]
+    result = pd.DataFrame(
+        {k: [initial_params[k]] * n_rows for k in initial_params.keys()} | products
     )
 
-    print(X.shape)
-    print(X)
-    print(Y.shape)
-    print(Y)
-
-    nanfilter = ~np.isnan(X).any(axis=1) & ~np.isnan(Y)
-    X = X[nanfilter]
-    Y = Y[nanfilter]
-
-    return X, Y
+    return result
 
 
-def save_data(Xs, Ys):
-    print(f"Saving data to file {out_filename}")
-    X = np.concatenate(Xs)
-    Y = np.concatenate(Ys)
-    if prev_contents:
-        prev_X, prev_Y = prev_contents
-        X = np.append(prev_X, X, axis=0)
-        Y = np.append(prev_Y, Y, axis=0)
-    with open(out_filename, "wb") as outfile:
-        pickle.dump((X, Y), outfile)
+def save_data(result_df):
+    print(f"{threading.current_thread().name}: Saving data to file {out_filename}")
+    if (result_df.size == 0):
+        print(f"{threading.current_thread().name}: No data to save.")
+        return
+    while True:
+        try:
+            file_lock.acquire()
+            out_df = result_df.copy()
+            if os.path.exists(out_filename):
+                with open(out_filename, "r") as prev_file:
+                    prev_df = pd.read_csv(prev_file)
+                max_prev_id = max(prev_df["simulation_id"])
+                out_df["simulation_id"] += max_prev_id + 1
+                out_df = pd.concat([prev_df, out_df])
+            out_df.to_csv(out_filename, index=False)
+        except PermissionError:
+            file_lock.release()
+            print(
+                f"{threading.current_thread().name}: The file is open in another program, cannot write."
+            )
+            time.sleep(1)
+        else:
+            file_lock.release()
+            print(
+                f"{threading.current_thread().name}: Successfully saved data to file."
+            )
+            break
 
 
 def generate_data(num_simulations):
+    result_df = pd.DataFrame()
+
     param_bounds = [
         (1, 4),  # log10(mode_N)
         (-3, 1),  # log10(mode_mean)
@@ -127,10 +120,10 @@ def generate_data(num_simulations):
     l_bounds = [b[0] for b in param_bounds]
     u_bounds = [b[1] for b in param_bounds]
     scaled = qmc.scale(sample, l_bounds, u_bounds)
-    Xs = []
-    Ys = []
     for i in range(num_simulations):
-        print("Simulation %d / %d" % (i + 1, num_simulations))
+        print(
+            f"{threading.current_thread().name}: Simulation {i + 1} / {num_simulations}"
+        )
         (
             log_mode_N,
             log_mode_mean,
@@ -142,7 +135,7 @@ def generate_data(num_simulations):
             mac,
         ) = scaled[i]
         try:
-            Xi, Yi = generate_data_one_simulation(
+            simulation_df = generate_data_one_simulation(
                 mode_N=10**log_mode_N * si.cm**-3,
                 mode_mean=10**log_mode_mean * si.um,
                 mode_stdev=mode_stdev,
@@ -152,16 +145,33 @@ def generate_data(num_simulations):
                 initial_pressure=initial_pressure * si.pascal,
                 mac=mac,
             )
-            Xs.append(Xi)
-            Ys.append(Yi)
+            simulation_df.insert(0, "simulation_id", i % SAVE_PERIOD)
+            result_df = pd.concat([result_df, simulation_df])
         except RuntimeError as err:
             if str(err) == "Condensation failed":
                 print(err)
             else:
                 raise
         if i % SAVE_PERIOD == SAVE_PERIOD - 1:
-            save_data(Xs, Ys)
-    save_data(Xs, Ys)
+            save_data(result_df)
+            result_df = pd.DataFrame()
+    save_data(result_df)
 
 
-generate_data(num_simulations)
+simulations_per_thread = [
+    num_simulations // num_threads + (1 if i < num_simulations % num_threads else 0)
+    for i in range(num_threads)
+]
+
+threads = [
+    threading.Thread(
+        target=generate_data, args=(simulations_per_thread[i],), name=f"Thread {i + 1}"
+    )
+    for i in range(num_threads)
+]
+
+for thread in threads:
+    thread.start()
+
+for thread in threads:
+    thread.join()

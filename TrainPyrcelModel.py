@@ -1,16 +1,25 @@
 import numpy as np
-import pickle
+import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 import matplotlib.pyplot as plt
 
-train_dataset_filename = "datasets/dataset2.pkl"
+train_dataset_filename = "datasets/dataset3.csv"
 
-with open(train_dataset_filename, "rb") as train_file:
-    X, Y = pickle.load(train_file)
+df = pd.read_csv(train_dataset_filename)
+
+X = np.array(
+    df[["mode_N", "mode_mean", "mode_kappa", "velocity", "mac", "RH", "T", "p"]]
+)
+Y = np.array(df["act_frac"])
 
 nanfilter = ~np.isnan(X).any(axis=1) & ~np.isnan(Y)
 X = X[nanfilter]
 Y = Y[nanfilter]
+
+x_mean = np.mean(X, axis=0)
+x_std = np.std(X, axis=0)
+
+X = (X - x_mean) / x_std
 
 train_size = int(len(X) * 0.8)
 
@@ -19,7 +28,7 @@ Y_train = Y[:train_size]
 X_test = X[train_size:]
 Y_test = Y[train_size:]
 
-regr = GradientBoostingRegressor()
+regr = GradientBoostingRegressor(learning_rate=1, max_depth=4)
 regr.fit(X_train, Y_train)
 
 
