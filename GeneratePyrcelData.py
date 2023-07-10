@@ -3,7 +3,7 @@ import os
 import time
 import argparse
 import pandas as pd
-import threading
+import multiprocessing as mp
 from PySDM import Formulae
 from MyPyrcelSimulation import MyPyrcelSimulation
 from MyPyrcelSettings import MyPyrcelSettings
@@ -18,18 +18,10 @@ T_MAX_PARCEL = 100 * si.s
 
 SAVE_PERIOD = 5
 
-parser = argparse.ArgumentParser()
-parser.add_argument("out_filename")
-parser.add_argument("--num_simulations", default=1)
-parser.add_argument("--num_threads", default=1)
 
-args = parser.parse_args()
-
-out_filename = "datasets/" + args.out_filename
-num_simulations = int(args.num_simulations)
-num_threads = int(args.num_threads)
-
-file_lock = threading.Lock()
+def process_print(*args, **kwargs):
+    print(f"Process {mp.current_process().name} (PID {os.getpid()}): ", end="")
+    print(*args, **kwargs)
 
 
 def generate_data_one_simulation(
@@ -72,34 +64,32 @@ def generate_data_one_simulation(
     return result
 
 
-def save_data(result_df):
-    print(f"{threading.current_thread().name}: Saving data to file {out_filename}")
-    if (result_df.size == 0):
-        print(f"{threading.current_thread().name}: No data to save.")
+def save_data(result_df, out_filename, file_lock):
+    file_lock.acquire()
+    process_print(f"Saving data to file {out_filename}")
+    if result_df.size == 0:
+        process_print("No data to save.")
+        file_lock.release()
         return
     while True:
         try:
-            file_lock.acquire()
             out_df = result_df.copy()
             if os.path.exists(out_filename):
                 with open(out_filename, "r") as prev_file:
                     prev_df = pd.read_csv(prev_file)
                 max_prev_id = max(prev_df["simulation_id"])
                 out_df["simulation_id"] += max_prev_id + 1
-                out_df = pd.concat([prev_df, out_df])
-            out_df.to_csv(out_filename, index=False)
+                out_df.to_csv(out_filename, mode="a", index=False, header=False)
+            else:
+                out_df.to_csv(out_filename, index=False)
         except PermissionError:
-            file_lock.release()
-            print(
-                f"{threading.current_thread().name}: The file is open in another program, cannot write."
-            )
+            process_print("The file is open in another program, cannot write.")
             time.sleep(1)
         else:
-            file_lock.release()
-            print(
-                f"{threading.current_thread().name}: Successfully saved data to file."
-            )
+            process_print("Successfully saved data to file.")
             break
+    file_lock.release()
+
 
 def sample_parameters(num_simulations):
     param_bounds = [
@@ -119,13 +109,14 @@ def sample_parameters(num_simulations):
     result = qmc.scale(sample, l_bounds, u_bounds)
     return result
 
-def generate_data(parameters):
+
+def generate_data(parameters, out_filename, file_lock):
     result_df = pd.DataFrame()
-    
+
+    num_simulations = len(parameters)
+
     for i in range(len(parameters)):
-        print(
-            f"{threading.current_thread().name}: Simulation {i + 1} / {num_simulations}"
-        )
+        process_print(f"Simulation {i + 1} / {num_simulations}")
         (
             log_mode_N,
             log_mode_mean,
@@ -151,28 +142,48 @@ def generate_data(parameters):
             result_df = pd.concat([result_df, simulation_df])
         except RuntimeError as err:
             if str(err) == "Condensation failed":
-                print(err)
+                process_print(err)
             else:
                 raise
         if i % SAVE_PERIOD == SAVE_PERIOD - 1:
-            save_data(result_df)
+            save_data(result_df, out_filename, file_lock)
             result_df = pd.DataFrame()
-    save_data(result_df)
+    save_data(result_df, out_filename, file_lock)
 
 
-parameters = sample_parameters(num_simulations)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("out_filename")
+    parser.add_argument("--num_simulations", default=1)
+    parser.add_argument("--num_processes", default=1)
 
-parameters_by_thread = np.array_split(parameters, num_threads)
+    args = parser.parse_args()
 
-threads = [
-    threading.Thread(
-        target=generate_data, args=(parameters_by_thread[i],), name=f"Thread {i + 1}"
-    )
-    for i in range(num_threads)
-]
+    out_filename = "datasets/" + args.out_filename
+    num_simulations = int(args.num_simulations)
+    num_processes = int(args.num_processes)
 
-for thread in threads:
-    thread.start()
+    parameters = sample_parameters(num_simulations)
 
-for thread in threads:
-    thread.join()
+    parameters_by_process = np.array_split(parameters, num_processes)
+
+    file_lock = mp.Lock()
+
+    processes = [
+        mp.Process(
+            target=generate_data,
+            args=(parameters_by_process[i], out_filename, file_lock),
+            name=f"{i + 1}",
+        )
+        for i in range(num_processes)
+    ]
+
+    for process in processes:
+        process.start()
+
+    for process in processes:
+        process.join()
+
+
+if __name__ == "__main__":
+    main()
