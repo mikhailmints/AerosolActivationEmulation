@@ -60,6 +60,7 @@ def generate_data_one_simulation(
     result = pd.DataFrame(
         {k: [initial_params[k]] * n_rows for k in initial_params.keys()} | products
     )
+    result = result[result["S_max"] == np.max(result["S_max"])].sample(1)
 
     return result
 
