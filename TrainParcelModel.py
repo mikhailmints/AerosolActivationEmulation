@@ -2,9 +2,9 @@ import numpy as np
 import sklearn.metrics
 from sklearn.ensemble import GradientBoostingRegressor
 import matplotlib.pyplot as plt
-from ExtractPyrcelFeatures import extract_pyrcel_features
+from ExtractParcelFeatures import extract_parcel_features
 
-X, Y, initial_data = extract_pyrcel_features("datasets/dataset2.csv")
+X, Y, initial_data = extract_parcel_features("datasets/dataset2.csv")
 arg_scheme = np.array(initial_data["ARG_act_frac"])
 
 # Shuffle

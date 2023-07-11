@@ -17,7 +17,7 @@ from PySDM.initialisation.sampling.spectral_sampling import ConstantMultiplicity
 from PySDM.physics import si
 
 
-class MyPyrcelSimulation:
+class MyParcelSimulation:
     def __init__(
         self,
         settings,

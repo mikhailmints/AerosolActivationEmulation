@@ -12,7 +12,7 @@ from PySDM.initialisation.impl.spectrum import Spectrum
 
 
 @strict
-class MyPyrcelSettings:
+class MyParcelSettings:
     def __init__(
         self,
         dt: float,

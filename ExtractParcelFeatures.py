@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 def get_one_datapoint(df, simulation_id):
     df = df[df["simulation_id"] == simulation_id]
@@ -9,7 +8,7 @@ def get_one_datapoint(df, simulation_id):
     return df[df["S_max"] == np.max(df["S_max"])].sample(1)
 
 
-def extract_pyrcel_features(dataset_filename):
+def extract_parcel_features(dataset_filename):
 
     df = pd.read_csv(dataset_filename)
 

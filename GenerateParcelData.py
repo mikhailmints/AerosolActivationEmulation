@@ -5,8 +5,8 @@ import argparse
 import pandas as pd
 import multiprocessing as mp
 from PySDM import Formulae
-from MyPyrcelSimulation import MyPyrcelSimulation
-from MyPyrcelSettings import MyPyrcelSettings
+from MyParcelSimulation import MyParcelSimulation
+from MyParcelSettings import MyParcelSettings
 from PySDM.physics import si
 from PySDM.initialisation.spectra import Lognormal
 from scipy.stats import qmc
@@ -36,7 +36,7 @@ def generate_data_one_simulation(
 ):
     initial_params = locals()
 
-    settings = MyPyrcelSettings(
+    settings = MyParcelSettings(
         dt=DT_PARCEL,
         n_sd_per_mode=(N_SD,),
         aerosol_modes_by_kappa={
@@ -52,7 +52,7 @@ def generate_data_one_simulation(
         formulae=Formulae(constants={"MAC": mac}),
     )
 
-    simulation = MyPyrcelSimulation(settings)
+    simulation = MyParcelSimulation(settings)
     results = simulation.run()
     products = results["products"]
     n_rows = len(list(products.values())[0])
