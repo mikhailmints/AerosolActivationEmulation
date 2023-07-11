@@ -58,7 +58,9 @@ dataset_filename = joinpath("datasets", ARGS[1])
 
 df = DF.DataFrame(CSV.File(dataset_filename))
 
-DF.select!(df, Not(:ARG_act_frac))
+if DF.columnindex(df, :ARG_act_frac) != 0
+    DF.select!(df, Not(:ARG_act_frac))
+end
 
 df = @transform(
     DF.dropmissing(df),

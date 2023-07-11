@@ -5,7 +5,6 @@ Adapted from PySDM_examples.Pyrcel
 import numpy as np
 from PySDM_examples.utils import BasicSimulation
 
-import PySDM
 from PySDM import Builder
 from PySDM import products as PySDM_products
 from PySDM.backends import CPU
@@ -67,7 +66,7 @@ class MyParcelSimulation:
             PySDM_products.AmbientRelativeHumidity(name="RH"),
             PySDM_products.AmbientTemperature(name="T"),
             PySDM_products.AmbientPressure(name="p"),
-            PySDM_products.AmbientWaterVapourMixingRatio(name="vapor_mix_ratio"),
+            PySDM_products.AmbientWaterVapourMixingRatio(name="vapor_mix_ratio", var="qv"),
             PySDM_products.WaterMixingRatio(name="water_mix_ratio"),
             PySDM_products.PeakSupersaturation(name="S_max", unit="%"),
             PySDM_products.ActivableFraction(name="act_frac"),
