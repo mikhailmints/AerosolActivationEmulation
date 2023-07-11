@@ -1,11 +1,10 @@
 import numpy as np
-import pandas as pd
-from scipy import stats
+import sklearn.metrics
 from sklearn.ensemble import GradientBoostingRegressor
 import matplotlib.pyplot as plt
 from ExtractPyrcelFeatures import extract_pyrcel_features
 
-X, Y, initial_data = extract_pyrcel_features("datasets/dataset1.csv")
+X, Y, initial_data = extract_pyrcel_features("datasets/dataset2.csv")
 arg_scheme = np.array(initial_data["ARG_act_frac"])
 
 # Shuffle
@@ -14,7 +13,7 @@ X = X[perm]
 Y = Y[perm]
 arg_scheme = arg_scheme[perm]
 
-train_size = int(len(X) * 0.5)
+train_size = int(len(X) * 0.75)
 
 X_train = X[:train_size]
 Y_train = Y[:train_size]
@@ -29,12 +28,19 @@ arg_scheme_test = arg_scheme[train_size:]
 # weights = (unique / counts)[inverse]
 
 regr = GradientBoostingRegressor(
-    learning_rate=0.1, n_estimators=100, max_depth=3, n_iter_no_change=20
+    learning_rate=0.1, n_estimators=500, max_depth=4, n_iter_no_change=50
 )
 regr.fit(X_train, Y_train)
 
-r2 = regr.score(X_test, Y_test)
-print(f"R^2 = {r2}")
+train_pred = regr.predict(X_train)
+test_pred = regr.predict(X_test)
+
+print(f"ARG R^2 = {sklearn.metrics.r2_score(Y_test, arg_scheme_test)}")
+print(f"ARG MSE = {sklearn.metrics.mean_squared_error(Y_test, arg_scheme_test)}")
+
+print(f"Model R^2 = {sklearn.metrics.r2_score(Y_test, regr.predict(X_test))}")
+print(f"Model MSE = {sklearn.metrics.mean_squared_error(Y_test, test_pred)}")
+
 
 
 def plot_accuracy_scatterplot(ax, Y, predictions):

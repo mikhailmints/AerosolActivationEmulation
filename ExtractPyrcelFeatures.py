@@ -8,8 +8,6 @@ def get_one_datapoint(df, simulation_id):
         return df
     return df[df["S_max"] == np.max(df["S_max"])].sample(1)
 
-def df_to_X(df):
-    pass
 
 def extract_pyrcel_features(dataset_filename):
 
@@ -22,11 +20,6 @@ def extract_pyrcel_features(dataset_filename):
 
     # Take 1 datapoint per simulation - one that has highest supersaturation
     df = pd.concat([get_one_datapoint(df, i) for i in range(num_simulations)])
-
-    # Eliminate outliers
-    std_threshold = 3
-    df = df[(np.abs(stats.zscore(df)) < std_threshold).all(axis=1)]
-
     initial_data = df.copy()
 
     # Apply log transformations
@@ -42,10 +35,8 @@ def extract_pyrcel_features(dataset_filename):
                 "mode_kappa",
                 "velocity",
                 "mac",
-                "qv",
-                "RH",
-                "T",
-                "p",
+                "initial_temperature",
+                "initial_pressure",
                 "ARG_act_frac"
             ]
         ]
