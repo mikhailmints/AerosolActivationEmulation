@@ -18,10 +18,11 @@ T_MAX_PARCEL = 100 * si.s
 
 SAVE_PERIOD = 5
 
+LOG_FILENAME = "slurm.out"
 
 def process_print(*args, **kwargs):
-    print(f"Process {mp.current_process().name} (PID {os.getpid()}): ", end="")
-    print(*args, **kwargs)
+    print(f"Process {mp.current_process().name} (PID {os.getpid()}): ", end="", file=open(LOG_FILENAME, "a"))
+    print(*args, **kwargs, file=open(LOG_FILENAME, "a"))
 
 
 def generate_data_one_simulation(
@@ -153,6 +154,8 @@ def generate_data(parameters, out_filename, file_lock):
 
 
 def main():
+    print("Starting data generation script")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("out_filename")
     parser.add_argument("--num_simulations", default=1)
@@ -160,9 +163,11 @@ def main():
 
     args = parser.parse_args()
 
-    out_filename = "datasets/" + args.out_filename
+    out_filename = args.out_filename
     num_simulations = int(args.num_simulations)
     num_processes = int(args.num_processes)
+
+    print("Sampling parameters")    
 
     parameters = sample_parameters(num_simulations)
 
@@ -179,7 +184,10 @@ def main():
         for i in range(num_processes)
     ]
 
+    print("Starting processes")
+
     for process in processes:
+        print(f"Starting process {process._name}")
         process.start()
 
     for process in processes:
