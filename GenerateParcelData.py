@@ -15,9 +15,10 @@ N_SD = 1000
 DT_PARCEL = 0.1 * si.s
 T_MAX_PARCEL = 100 * si.s
 
+LOG_FILE = "slurm.out"
 
 def process_print(s):
-    print(f"Process {os.getpid()}: {s}")
+    print(f"Process {os.getpid()}: {s}", file=open(LOG_FILE, "a"))
 
 
 def generate_data_one_simulation(
