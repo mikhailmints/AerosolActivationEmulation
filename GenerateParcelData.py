@@ -2,27 +2,22 @@ import numpy as np
 import os
 import time
 import argparse
+import pickle
 import pandas as pd
-import multiprocessing as mp
 from PySDM import Formulae
 from MyParcelSimulation import MyParcelSimulation
 from MyParcelSettings import MyParcelSettings
 from PySDM.physics import si
 from PySDM.initialisation.spectra import Lognormal
-from scipy.stats import qmc
 
 
 N_SD = 1000
 DT_PARCEL = 0.1 * si.s
 T_MAX_PARCEL = 100 * si.s
 
-SAVE_PERIOD = 5
 
-LOG_FILENAME = "slurm.out"
-
-def process_print(*args, **kwargs):
-    print(f"Process {mp.current_process().name} (PID {os.getpid()}): ", end="", file=open(LOG_FILENAME, "a"))
-    print(*args, **kwargs, file=open(LOG_FILENAME, "a"))
+def process_print(s):
+    print(f"Process {os.getpid()}: {s}")
 
 
 def generate_data_one_simulation(
@@ -66,12 +61,10 @@ def generate_data_one_simulation(
     return result
 
 
-def save_data(result_df, out_filename, file_lock):
-    file_lock.acquire()
+def save_data(result_df, out_filename):
     process_print(f"Saving data to file {out_filename}")
     if result_df.size == 0:
         process_print("No data to save.")
-        file_lock.release()
         return
     while True:
         try:
@@ -90,29 +83,9 @@ def save_data(result_df, out_filename, file_lock):
         else:
             process_print("Successfully saved data to file.")
             break
-    file_lock.release()
 
 
-def sample_parameters(num_simulations):
-    param_bounds = [
-        (1, 4),  # log10(mode_N)
-        (-3, 1),  # log10(mode_mean)
-        (1.6, 1.8),  # mode_stdev
-        (0, 1.2),  # mode_kappa
-        (-2, 1),  # log10(velocity)
-        (248, 310),  # initial_temperature
-        (50000, 105000),  # initial_pressure
-        (0.1, 1.0),  # mac
-    ]
-    sampler = qmc.LatinHypercube(d=len(param_bounds))
-    sample = sampler.random(n=num_simulations)
-    l_bounds = [b[0] for b in param_bounds]
-    u_bounds = [b[1] for b in param_bounds]
-    result = qmc.scale(sample, l_bounds, u_bounds)
-    return result
-
-
-def generate_data(parameters, out_filename, file_lock):
+def generate_data(parameters, out_filename, save_period):
     result_df = pd.DataFrame()
 
     num_simulations = len(parameters)
@@ -140,58 +113,36 @@ def generate_data(parameters, out_filename, file_lock):
                 initial_pressure=initial_pressure * si.pascal,
                 mac=mac,
             )
-            simulation_df.insert(0, "simulation_id", i % SAVE_PERIOD)
+            simulation_df.insert(0, "simulation_id", i % save_period)
             result_df = pd.concat([result_df, simulation_df])
         except RuntimeError as err:
             if str(err) == "Condensation failed":
                 process_print(err)
             else:
                 raise
-        if i % SAVE_PERIOD == SAVE_PERIOD - 1:
-            save_data(result_df, out_filename, file_lock)
+        if i % save_period == save_period - 1:
+            save_data(result_df, out_filename)
             result_df = pd.DataFrame()
-    save_data(result_df, out_filename, file_lock)
+    save_data(result_df, out_filename)
 
 
 def main():
-    print("Starting data generation script")
+    process_print("Starting data generation script")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("out_filename")
-    parser.add_argument("--num_simulations", default=1)
-    parser.add_argument("--num_processes", default=1)
+    parser.add_argument("--out_filename", required=True)
+    parser.add_argument("--sample_filename", required=True)
+    parser.add_argument("--save_period", default=5)
 
     args = parser.parse_args()
 
     out_filename = args.out_filename
-    num_simulations = int(args.num_simulations)
-    num_processes = int(args.num_processes)
+    parameters = pickle.load(open(args.sample_filename, "rb"))
+    save_period = int(args.save_period)
 
-    print("Sampling parameters")    
+    generate_data(parameters, out_filename, save_period)
 
-    parameters = sample_parameters(num_simulations)
-
-    parameters_by_process = np.array_split(parameters, num_processes)
-
-    file_lock = mp.Lock()
-
-    processes = [
-        mp.Process(
-            target=generate_data,
-            args=(parameters_by_process[i], out_filename, file_lock),
-            name=f"{i + 1}",
-        )
-        for i in range(num_processes)
-    ]
-
-    print("Starting processes")
-
-    for process in processes:
-        print(f"Starting process {process._name}")
-        process.start()
-
-    for process in processes:
-        process.join()
+    process_print("Done")
 
 
 if __name__ == "__main__":
