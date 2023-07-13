@@ -23,7 +23,8 @@ class MyParcelSimulation:
         scipy_solver=False,
         rtol_thd=1e-10,
         rtol_x=1e-10,
-        dt_cond_range=(1e-3 * si.second, 1 * si.second),
+        dt_cond_range=(1e-4 * si.second, 1 * si.second),
+        equilibrate=False
     ):
         env = Parcel(
             dt=settings.timestep,
@@ -54,12 +55,15 @@ class MyParcelSimulation:
             attributes["kappa times dry volume"] = np.append(
                 attributes["kappa times dry volume"], v_dry * kappa
             )
-        r_wet = equilibrate_wet_radii(
-            r_dry=settings.formulae.trivia.radius(volume=attributes["dry volume"]),
-            environment=env,
-            kappa_times_dry_volume=attributes["kappa times dry volume"],
-        )
-        attributes["volume"] = settings.formulae.trivia.volume(radius=r_wet)
+        if equilibrate:
+            r_wet = equilibrate_wet_radii(
+                r_dry=settings.formulae.trivia.radius(volume=attributes["dry volume"]),
+                environment=env,
+                kappa_times_dry_volume=attributes["kappa times dry volume"],
+            )
+            attributes["volume"] = settings.formulae.trivia.volume(radius=r_wet)
+        else:
+            attributes["volume"] = attributes["dry volume"]
 
         products = (
             PySDM_products.Time(name="time"),
@@ -121,6 +125,4 @@ class MyParcelSimulation:
         ):
             self.particulator.run(steps=self.settings.steps_per_output_interval)
             self._save(output)
-            # if output["act_frac"][-1] == 1:
-            #     break
         return {"products": output, "attributes": self.output_attributes}

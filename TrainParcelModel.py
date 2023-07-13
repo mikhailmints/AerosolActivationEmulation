@@ -4,7 +4,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 import matplotlib.pyplot as plt
 from ExtractParcelFeatures import extract_parcel_features
 
-X, Y, initial_data = extract_parcel_features("datasets/dataset1.csv")
+X, Y, initial_data = extract_parcel_features("datasets/dataset3.csv")
 arg_scheme = np.array(initial_data["ARG_act_frac"])
 
 # Shuffle

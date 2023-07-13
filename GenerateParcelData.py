@@ -15,12 +15,25 @@ N_SD = 1000
 DT_PARCEL = 0.1 * si.s
 T_MAX_PARCEL = 100 * si.s
 
-LOG_FILE = "slurm.out"
+parser = argparse.ArgumentParser()
+parser.add_argument("--out_filename", required=True)
+parser.add_argument("--sample_filename", required=True)
+parser.add_argument("--save_period", default=5)
+parser.add_argument("--log_filename", default=None)
+
+args = parser.parse_args()
+
+log_filename = args.log_filename
+
 
 def process_print(s):
-    print(f"Process {os.getpid()}: {s}", file=open(LOG_FILE, "a"))
+    print(
+        f"Process {os.getpid()}: {s}",
+        file=open(log_filename, "a") if log_filename else None,
+    )
 
 
+# Run one parcel simulation, output the data for all timesteps
 def generate_data_one_simulation(
     mode_N,
     mode_mean,
@@ -49,6 +62,8 @@ def generate_data_one_simulation(
         formulae=Formulae(constants={"MAC": mac}),
     )
 
+    initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
+
     simulation = MyParcelSimulation(settings)
     results = simulation.run()
     products = results["products"]
@@ -57,7 +72,6 @@ def generate_data_one_simulation(
     result = pd.DataFrame(
         {k: [initial_params[k]] * n_rows for k in initial_params.keys()} | products
     )
-    result = result[result["S_max"] == np.max(result["S_max"])].sample(1)
 
     return result
 
@@ -114,6 +128,10 @@ def generate_data(parameters, out_filename, save_period):
                 initial_pressure=initial_pressure * si.pascal,
                 mac=mac,
             )
+            # Only take data at the time of maximum supersaturation
+            simulation_df = simulation_df[
+                simulation_df["S_max"] == np.max(simulation_df["S_max"])
+            ].sample(1)
             simulation_df.insert(0, "simulation_id", i % save_period)
             result_df = pd.concat([result_df, simulation_df])
         except RuntimeError as err:
@@ -129,13 +147,6 @@ def generate_data(parameters, out_filename, save_period):
 
 def main():
     process_print("Starting data generation script")
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--out_filename", required=True)
-    parser.add_argument("--sample_filename", required=True)
-    parser.add_argument("--save_period", default=5)
-
-    args = parser.parse_args()
 
     out_filename = args.out_filename
     parameters = pickle.load(open(args.sample_filename, "rb"))

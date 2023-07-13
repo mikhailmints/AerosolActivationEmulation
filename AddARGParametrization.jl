@@ -21,7 +21,6 @@ function activation_fraction(
     temperature,
     pressure,
     vapor_mix_ratio,
-    water_mix_ratio,
 )
     try
         ad = AM.AerosolDistribution((
@@ -37,8 +36,7 @@ function activation_fraction(
             ),
         ))
         q_vap = (vapor_mix_ratio) / (vapor_mix_ratio + 1)
-        q_liq = (water_mix_ratio) / (water_mix_ratio + 1)
-        q = TD.PhasePartition(q_vap + q_liq, q_liq, FT(0))
+        q = TD.PhasePartition(q_vap, FT(0), FT(0))
         N_act = AA.total_N_activated(
             param_set,
             ad,
@@ -73,8 +71,7 @@ df = @transform(
             :velocity,
             :initial_temperature,
             :initial_pressure,
-            :vapor_mix_ratio,
-            :water_mix_ratio,
+            :initial_vapor_mix_ratio,
         )
 )
 
