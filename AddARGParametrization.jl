@@ -56,13 +56,13 @@ dataset_filename = joinpath("datasets", ARGS[1])
 
 df = DF.DataFrame(CSV.File(dataset_filename))
 
-if DF.columnindex(df, :ARG_act_frac) != 0
-    DF.select!(df, Not(:ARG_act_frac))
+if DF.columnindex(df, :ARG_act_frac_CliMA) != 0
+    DF.select!(df, Not(:ARG_act_frac_CliMA))
 end
 
 df = @transform(
     DF.dropmissing(df),
-    :ARG_act_frac =
+    :ARG_act_frac_CliMA =
         activation_fraction.(
             :mode_N,
             :mode_mean,
@@ -71,7 +71,7 @@ df = @transform(
             :velocity,
             :initial_temperature,
             :initial_pressure,
-            :initial_vapor_mix_ratio,
+            :initial_vapor_mix_ratio
         )
 )
 

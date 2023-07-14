@@ -63,7 +63,7 @@ class MyParcelSimulation:
             )
             attributes["volume"] = settings.formulae.trivia.volume(radius=r_wet)
         else:
-            attributes["volume"] = attributes["dry volume"]
+            attributes["volume"] = attributes["dry volume"].copy()
 
         products = (
             PySDM_products.Time(name="time"),

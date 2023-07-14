@@ -4,14 +4,15 @@ from sklearn.ensemble import GradientBoostingRegressor
 import matplotlib.pyplot as plt
 from ExtractParcelFeatures import extract_parcel_features
 
-X, Y, initial_data = extract_parcel_features("datasets/dataset3.csv")
-arg_scheme = np.array(initial_data["ARG_act_frac"])
+X, Y, initial_data = extract_parcel_features("datasets/dataset4.csv")
+arg_scheme_CliMA = np.array(initial_data["ARG_act_frac_CliMA"])
+arg_scheme_pyrcel = np.array(initial_data["ARG_act_frac_pyrcel"])
 
-# Shuffle
 perm = np.random.permutation(len(X))
 X = X[perm]
 Y = Y[perm]
-arg_scheme = arg_scheme[perm]
+arg_scheme_CliMA = arg_scheme_CliMA[perm]
+arg_scheme_pyrcel = arg_scheme_pyrcel[perm]
 
 train_size = int(len(X) * 0.75)
 
@@ -20,7 +21,7 @@ Y_train = Y[:train_size]
 X_test = X[train_size:]
 Y_test = Y[train_size:]
 
-arg_scheme_test = arg_scheme[train_size:]
+arg_scheme_test = arg_scheme_CliMA[train_size:]
 
 # unique, inverse, counts = np.unique(
 #     np.digitize(Y_train, np.linspace(0, 1, 50)), return_inverse=True, return_counts=True
@@ -52,8 +53,8 @@ def plot_accuracy_scatterplot(ax, Y, predictions):
     ax.scatter(Y, predictions, s=1, color="black")
 
 fig, ax = plt.subplots(figsize=(5, 3))
-ax.set_title("ARG Scheme Predictions on Testing Data")
-plot_accuracy_scatterplot(ax, Y_test, arg_scheme_test)
+ax.set_title("ARG Scheme Predictions")
+plot_accuracy_scatterplot(ax, Y, arg_scheme_CliMA)
 
 plt.show()
 
