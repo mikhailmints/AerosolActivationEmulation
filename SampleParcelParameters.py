@@ -13,7 +13,6 @@ def sample_parameters(num_simulations):
         (-2, 1),  # log10(velocity)
         (248, 310),  # initial_temperature
         (50000, 105000),  # initial_pressure
-        (0.1, 1.0),  # mac
     ]
     sampler = qmc.LatinHypercube(d=len(param_bounds))
     sample = sampler.random(n=num_simulations)

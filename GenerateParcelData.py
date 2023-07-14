@@ -115,7 +115,6 @@ def generate_data(parameters, out_filename, save_period):
             log_velocity,
             initial_temperature,
             initial_pressure,
-            mac,
         ) = parameters[i]
         try:
             simulation_df = generate_data_one_simulation(
@@ -126,7 +125,7 @@ def generate_data(parameters, out_filename, save_period):
                 velocity=10**log_velocity * si.m / si.s,
                 initial_temperature=initial_temperature * si.kelvin,
                 initial_pressure=initial_pressure * si.pascal,
-                mac=mac,
+                mac=1,
             )
             # Only take data at the time of maximum supersaturation
             simulation_df = simulation_df[

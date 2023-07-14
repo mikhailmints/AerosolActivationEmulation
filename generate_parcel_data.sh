@@ -25,7 +25,7 @@ mkdir -p datasets/temp
 
 for ((I=1; I<=$SLURM_NPROCS; I++)) 
 do
-    srun -n1 --exclusive python3 GenerateParcelData.py --out_filename="datasets/temp/temp_dataset${I}.csv" --sample_filename="samples/sample${I}.pkl" --save_period=10 &
+    srun -n1 --exclusive python3 GenerateParcelData.py --out_filename="datasets/temp/temp_dataset${I}.csv" --sample_filename="samples/sample${I}.pkl" --save_period=10 --log_filename=slurm.out &
 done
 
 wait
