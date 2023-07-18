@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import time
+import timeout_decorator
 import argparse
 import pickle
 import pandas as pd
@@ -12,12 +13,15 @@ from PySDM.initialisation.spectra import Lognormal
 
 
 N_SD = 1000
-DT_PARCEL = 0.1 * si.s
-T_MAX_PARCEL = 100 * si.s
+DZ_PARCEL = 1 * si.s
+Z_MAX_PARCEL = 1000 * si.m
+
+SIMULATION_TIMEOUT = 5 * 60
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--out_filename", required=True)
 parser.add_argument("--sample_filename", required=True)
+parser.add_argument("--fail_filename", default=None)
 parser.add_argument("--save_period", default=5)
 parser.add_argument("--log_filename", default=None)
 
@@ -31,49 +35,6 @@ def process_print(s):
         f"Process {os.getpid()}: {s}",
         file=open(log_filename, "a") if log_filename else None,
     )
-
-
-# Run one parcel simulation, output the data for all timesteps
-def generate_data_one_simulation(
-    mode_N,
-    mode_mean,
-    mode_stdev,
-    mode_kappa,
-    velocity,
-    initial_temperature,
-    initial_pressure,
-    mac,
-):
-    initial_params = locals()
-
-    settings = MyParcelSettings(
-        dt=DT_PARCEL,
-        n_sd_per_mode=(N_SD,),
-        aerosol_modes_by_kappa={
-            mode_kappa: Lognormal(
-                norm_factor=mode_N, m_mode=mode_mean, s_geom=mode_stdev
-            )
-        },
-        vertical_velocity=velocity,
-        initial_pressure=initial_pressure,
-        initial_temperature=initial_temperature,
-        initial_relative_humidity=1,
-        t_max=T_MAX_PARCEL,
-        formulae=Formulae(constants={"MAC": mac}),
-    )
-
-    initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
-
-    simulation = MyParcelSimulation(settings)
-    results = simulation.run()
-    products = results["products"]
-    n_rows = len(list(products.values())[0])
-
-    result = pd.DataFrame(
-        {k: [initial_params[k]] * n_rows for k in initial_params.keys()} | products
-    )
-
-    return result
 
 
 def save_data(result_df, out_filename):
@@ -100,7 +61,57 @@ def save_data(result_df, out_filename):
             break
 
 
-def generate_data(parameters, out_filename, save_period):
+# Run one parcel simulation, output the data for all timesteps
+def generate_data_one_simulation(
+    mode_N,
+    mode_mean,
+    mode_stdev,
+    mode_kappa,
+    velocity,
+    initial_temperature,
+    initial_pressure,
+    mac,
+):
+    initial_params = locals()
+
+    settings = MyParcelSettings(
+        dt=DZ_PARCEL / velocity,
+        n_sd_per_mode=(N_SD,),
+        aerosol_modes_by_kappa={
+            mode_kappa: Lognormal(
+                norm_factor=mode_N, m_mode=mode_mean, s_geom=mode_stdev
+            )
+        },
+        vertical_velocity=velocity,
+        initial_pressure=initial_pressure,
+        initial_temperature=initial_temperature,
+        initial_relative_humidity=1,
+        t_max=Z_MAX_PARCEL / velocity,
+        formulae=Formulae(constants={"MAC": mac}),
+    )
+
+    initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
+
+    try:
+        simulation = MyParcelSimulation(settings)
+        results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(simulation.run)()
+    except Exception as err:
+        process_print(err)
+        initial_params["error"] = str(err).strip("\"'")
+        result = pd.DataFrame(initial_params, index=[0])
+        return result, False
+         
+    products = results["products"]
+    n_rows = len(list(products.values())[0])
+
+    result = pd.DataFrame(
+        {k: [initial_params[k]] * n_rows for k in initial_params.keys()} | products
+    )
+
+    return result, True
+
+
+def generate_data(parameters, out_filename, fail_filename, save_period):
     result_df = pd.DataFrame()
 
     num_simulations = len(parameters)
@@ -117,7 +128,7 @@ def generate_data(parameters, out_filename, save_period):
             initial_pressure,
         ) = parameters[i]
         try:
-            simulation_df = generate_data_one_simulation(
+            simulation_df, success = generate_data_one_simulation(
                 mode_N=10**log_mode_N * si.cm**-3,
                 mode_mean=10**log_mode_mean * si.um,
                 mode_stdev=mode_stdev,
@@ -128,16 +139,16 @@ def generate_data(parameters, out_filename, save_period):
                 mac=1,
             )
             # Only take data at the time of maximum supersaturation
-            simulation_df = simulation_df[
-                simulation_df["S_max"] == np.max(simulation_df["S_max"])
-            ].sample(1)
+            # simulation_df = simulation_df[
+            #     simulation_df["S_max"] == np.max(simulation_df["S_max"])
+            # ].sample(1)
             simulation_df.insert(0, "simulation_id", i % save_period)
-            result_df = pd.concat([result_df, simulation_df])
-        except RuntimeError as err:
-            if str(err) == "Condensation failed":
-                process_print(err)
-            else:
-                raise
+            if success:
+                result_df = pd.concat([result_df, simulation_df])
+            elif fail_filename:
+                save_data(simulation_df, fail_filename)
+        except timeout_decorator.TimeoutError:
+            process_print("Timed out")
         if i % save_period == save_period - 1:
             save_data(result_df, out_filename)
             result_df = pd.DataFrame()
@@ -149,9 +160,10 @@ def main():
 
     out_filename = args.out_filename
     parameters = pickle.load(open(args.sample_filename, "rb"))
+    fail_filename = args.fail_filename
     save_period = int(args.save_period)
 
-    generate_data(parameters, out_filename, save_period)
+    generate_data(parameters, out_filename, fail_filename, save_period)
 
     process_print("Done")
 

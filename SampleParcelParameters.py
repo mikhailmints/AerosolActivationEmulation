@@ -7,7 +7,7 @@ from scipy.stats import qmc
 def sample_parameters(num_simulations):
     param_bounds = [
         (1, 4),  # log10(mode_N)
-        (-3, 1),  # log10(mode_mean)
+        (-3, 0),  # log10(mode_mean)
         (1.6, 1.8),  # mode_stdev
         (0, 1.2),  # mode_kappa
         (-2, 1),  # log10(velocity)
