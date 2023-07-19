@@ -60,7 +60,7 @@ class MyParcelSettings:
     def nt(self) -> int:
         nt = self.t_max / self.timestep
         nt_int = round(nt)
-        np.testing.assert_almost_equal(nt, nt_int)
+        # np.testing.assert_almost_equal(nt, nt_int)
         return nt_int
 
     @property

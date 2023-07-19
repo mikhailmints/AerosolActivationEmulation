@@ -13,21 +13,23 @@ from PySDM.initialisation.spectra import Lognormal
 
 
 N_SD = 1000
-DZ_PARCEL = 1 * si.s
+MAX_DZ_PARCEL = 1 * si.m
+MAX_DT_PARCEL = 10 * si.s
 Z_MAX_PARCEL = 1000 * si.m
 
 SIMULATION_TIMEOUT = 5 * 60
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--out_filename", required=True)
-parser.add_argument("--sample_filename", required=True)
-parser.add_argument("--fail_filename", default=None)
-parser.add_argument("--save_period", default=5)
-parser.add_argument("--log_filename", default=None)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out_filename", required=True)
+    parser.add_argument("--sample_filename", required=True)
+    parser.add_argument("--fail_filename", default=None)
+    parser.add_argument("--save_period", default=5)
+    parser.add_argument("--log_filename", default=None)
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
-log_filename = args.log_filename
+    log_filename = args.log_filename
 
 
 def process_print(s):
@@ -48,8 +50,9 @@ def save_data(result_df, out_filename):
             if os.path.exists(out_filename):
                 with open(out_filename, "r") as prev_file:
                     prev_df = pd.read_csv(prev_file)
-                max_prev_id = max(prev_df["simulation_id"])
-                out_df["simulation_id"] += max_prev_id + 1
+                if "simulation_id" in prev_df.keys():
+                    max_prev_id = max(prev_df["simulation_id"])
+                    out_df["simulation_id"] += max_prev_id + 1
                 out_df.to_csv(out_filename, mode="a", index=False, header=False)
             else:
                 out_df.to_csv(out_filename, index=False)
@@ -75,7 +78,7 @@ def generate_data_one_simulation(
     initial_params = locals()
 
     settings = MyParcelSettings(
-        dt=DZ_PARCEL / velocity,
+        dt=min(MAX_DZ_PARCEL / velocity, MAX_DT_PARCEL),
         n_sd_per_mode=(N_SD,),
         aerosol_modes_by_kappa={
             mode_kappa: Lognormal(
@@ -95,7 +98,7 @@ def generate_data_one_simulation(
     try:
         simulation = MyParcelSimulation(settings)
         results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(simulation.run)()
-    except Exception as err:
+    except (RuntimeError, timeout_decorator.TimeoutError) as err:
         process_print(err)
         initial_params["error"] = str(err).strip("\"'")
         result = pd.DataFrame(initial_params, index=[0])
@@ -103,6 +106,14 @@ def generate_data_one_simulation(
          
     products = results["products"]
     n_rows = len(list(products.values())[0])
+
+    saturation_mask = products["S_max"] >= 0
+    if np.any(saturation_mask):
+        initial_params["saturation_temperature"] = products["T"][saturation_mask][0]
+        initial_params["saturation_pressure"] = products["p"][saturation_mask][0]
+    else:
+        initial_params["saturation_temperature"] = np.nan
+        initial_params["saturation_pressure"] = np.nan
 
     result = pd.DataFrame(
         {k: [initial_params[k]] * n_rows for k in initial_params.keys()} | products
@@ -127,28 +138,25 @@ def generate_data(parameters, out_filename, fail_filename, save_period):
             initial_temperature,
             initial_pressure,
         ) = parameters[i]
-        try:
-            simulation_df, success = generate_data_one_simulation(
-                mode_N=10**log_mode_N * si.cm**-3,
-                mode_mean=10**log_mode_mean * si.um,
-                mode_stdev=mode_stdev,
-                mode_kappa=mode_kappa,
-                velocity=10**log_velocity * si.m / si.s,
-                initial_temperature=initial_temperature * si.kelvin,
-                initial_pressure=initial_pressure * si.pascal,
-                mac=1,
-            )
+        simulation_df, success = generate_data_one_simulation(
+            mode_N=10**log_mode_N * si.cm**-3,
+            mode_mean=10**log_mode_mean * si.um,
+            mode_stdev=mode_stdev,
+            mode_kappa=mode_kappa,
+            velocity=10**log_velocity * si.m / si.s,
+            initial_temperature=initial_temperature * si.kelvin,
+            initial_pressure=initial_pressure * si.pascal,
+            mac=1,
+        )
+        if success:
             # Only take data at the time of maximum supersaturation
-            # simulation_df = simulation_df[
-            #     simulation_df["S_max"] == np.max(simulation_df["S_max"])
-            # ].sample(1)
+            simulation_df = simulation_df[
+                simulation_df["S_max"] == np.max(simulation_df["S_max"])
+            ].sample(1)
             simulation_df.insert(0, "simulation_id", i % save_period)
-            if success:
-                result_df = pd.concat([result_df, simulation_df])
-            elif fail_filename:
-                save_data(simulation_df, fail_filename)
-        except timeout_decorator.TimeoutError:
-            process_print("Timed out")
+            result_df = pd.concat([result_df, simulation_df])
+        elif fail_filename:
+            save_data(simulation_df, fail_filename)
         if i % save_period == save_period - 1:
             save_data(result_df, out_filename)
             result_df = pd.DataFrame()

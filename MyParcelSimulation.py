@@ -23,7 +23,7 @@ class MyParcelSimulation:
         scipy_solver=False,
         rtol_thd=1e-10,
         rtol_x=1e-10,
-        dt_cond_range=(1e-4 * si.second, 1 * si.second),
+        dt_cond_range=(1e-3 * si.second, 1 * si.second),
         equilibrate=False
     ):
         env = Parcel(
@@ -119,10 +119,10 @@ class MyParcelSimulation:
 
     def run(self):
         output = {k: [] for k in self.particulator.products}
-        self._save(output)
         for _ in range(
-            0, self.settings.nt + 1, self.settings.steps_per_output_interval
+            0, self.settings.nt, self.settings.steps_per_output_interval
         ):
             self.particulator.run(steps=self.settings.steps_per_output_interval)
             self._save(output)
+        output = {k : np.array(v) for k, v in output.items()}
         return {"products": output, "attributes": self.output_attributes}
