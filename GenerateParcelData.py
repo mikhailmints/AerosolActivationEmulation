@@ -5,7 +5,6 @@ import timeout_decorator
 import argparse
 import pickle
 import pandas as pd
-import pyrcel
 from PySDM import Formulae
 from MyParcelSimulation import MyParcelSimulation
 from MyParcelSettings import MyParcelSettings
@@ -101,20 +100,12 @@ def generate_data_one_simulation(
 
     initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
 
-    pyrcel_aerosols = [pyrcel.AerosolSpecies("mode1", distribution=pyrcel.Lognorm(mode_mean, mode_stdev, mode_N),
-                                             kappa=mode_kappa, bins=N_SD)]
-
     try:
         simulation = MyParcelSimulation(settings)
         if SIMULATION_TIMEOUT:
             results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(simulation.run)()
         else:
             results = simulation.run()
-        
-        pyrcel_model = pyrcel.ParcelModel(pyrcel_aerosols, velocity, initial_temperature, 0, initial_pressure)
-
-        parcel_out, aerosol_out = pyrcel_model.run(t_end=t_max, output_dt=dt, solver_dt=dt, solver="cvode", terminate=True)
-
     except (RuntimeError, timeout_decorator.TimeoutError) as err:
         process_print(err)
         initial_params["error"] = str(err).strip("\"'")

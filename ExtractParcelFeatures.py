@@ -1,13 +1,11 @@
 import numpy as np
 import pandas as pd
 import pyrcel
+from GenerateParcelData import Z_MAX_PARCEL
 
 
 def extract_parcel_features(dataset_filename):
     df = pd.read_csv(dataset_filename)
-
-    # Remove NaN rows
-    df.dropna(inplace=True)
 
     df["ARG_act_frac_pyrcel"] = df.apply(
         lambda row: pyrcel.arg2000(
@@ -23,9 +21,10 @@ def extract_parcel_features(dataset_filename):
         axis=1,
     )
 
-    initial_data = df.copy()
+    df = df[(df["time"] * df["velocity"] < Z_MAX_PARCEL)]
 
-    # df = df[df["RH"] > 1]
+    # Save untransformed version of the data
+    initial_data = df.copy()
 
     # Apply log transformations
     df[["mode_N", "mode_mean", "velocity"]] = df[
@@ -40,14 +39,13 @@ def extract_parcel_features(dataset_filename):
                 "mode_stdev",
                 "mode_kappa",
                 "velocity",
-                "mac",
                 "initial_temperature",
                 "initial_pressure",
                 "ARG_act_frac_CliMA",
             ]
         ]
     )
-    Y = np.array(df["act_frac"])
+    Y = np.array(df["act_frac_S"])
 
     x_mean = np.mean(X, axis=0)
     x_std = np.std(X, axis=0)

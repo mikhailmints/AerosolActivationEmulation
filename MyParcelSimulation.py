@@ -25,9 +25,9 @@ class MyParcelSimulation:
         self,
         settings,
         scipy_solver=False,
-        rtol_RH=1e-10,
+        rtol_thd=1e-10,
         rtol_x=1e-10,
-        dt_cond_range=(1e-8 * si.second, 1 * si.second),
+        dt_cond_range=(1e-4 * si.second, 1 * si.second),
         equilibrate=True,
         early_stop=True,
         max_iterations_without_increasing_smax=5,
@@ -45,7 +45,7 @@ class MyParcelSimulation:
         builder.set_environment(env)
         builder.add_dynamic(AmbientThermodynamics())
         builder.add_dynamic(
-            Condensation(rtol_RH=rtol_RH, rtol_x=rtol_x, dt_cond_range=dt_cond_range)
+            Condensation(rtol_thd=rtol_thd, rtol_x=rtol_x, dt_cond_range=dt_cond_range)
         )
 
         volume = env.mass_of_dry_air / settings.initial_air_density

@@ -1,0 +1,132 @@
+import CloudMicrophysics as CM
+import CloudMicrophysics: AerosolActivation as AA, AerosolModel as AM
+import CLIMAParameters as CP
+import Thermodynamics as TD
+import CSV
+import DataFrames as DF
+using DataFramesMeta
+
+const FT = Float64
+
+include(joinpath(pkgdir(CM), "test", "create_parameters.jl"))
+toml_dict = CP.create_toml_dict(Float64; dict_type = "alias")
+param_set = cloud_microphysics_parameters(toml_dict)
+
+function activation_fraction(
+    mode_N,
+    mode_mean,
+    mode_stdev,
+    mode_kappa,
+    velocity,
+    temperature,
+    pressure,
+    vapor_mix_ratio,
+)
+    try
+        ad = AM.AerosolDistribution((
+            AM.Mode_κ(
+                mode_mean,
+                mode_stdev,
+                mode_N,
+                FT(1),
+                FT(1),
+                FT(0),
+                mode_kappa,
+                1,
+            ),
+        ))
+        q_vap = (vapor_mix_ratio) / (vapor_mix_ratio + 1)
+        q = TD.PhasePartition(q_vap, FT(0), FT(0))
+        N_act = AA.total_N_activated(
+            param_set,
+            ad,
+            temperature,
+            pressure,
+            velocity,
+            q,
+        )
+        act_frac = N_act / mode_N
+        return act_frac
+    catch
+        return missing
+    end
+end
+
+function max_supersaturation(
+    mode_N,
+    mode_mean,
+    mode_stdev,
+    mode_kappa,
+    velocity,
+    temperature,
+    pressure,
+    vapor_mix_ratio,
+)
+    try
+        ad = AM.AerosolDistribution((
+            AM.Mode_κ(
+                mode_mean,
+                mode_stdev,
+                mode_N,
+                FT(1),
+                FT(1),
+                FT(0),
+                mode_kappa,
+                1,
+            ),
+        ))
+        q_vap = (vapor_mix_ratio) / (vapor_mix_ratio + 1)
+        q = TD.PhasePartition(q_vap, FT(0), FT(0))
+        S_max = AA.max_supersaturation(
+            param_set,
+            ad,
+            temperature,
+            pressure,
+            velocity,
+            q,
+        )
+        return S_max
+    catch
+        return missing
+    end
+end
+
+dataset_filename = ARGS[1]
+
+df = DF.DataFrame(CSV.File(dataset_filename))
+
+if DF.columnindex(df, :ARG_act_frac_CliMA) != 0
+    DF.select!(df, Not(:ARG_act_frac_CliMA))
+end
+
+if DF.columnindex(df, :ARG_S_max_CliMA) != 0
+    DF.select!(df, Not(:ARG_S_max_CliMA))
+end
+
+df = @transform(
+    df,
+    :ARG_act_frac_CliMA =
+        activation_fraction.(
+            :mode_N,
+            :mode_mean,
+            :mode_stdev,
+            :mode_kappa,
+            :velocity,
+            :initial_temperature,
+            :initial_pressure,
+            :initial_vapor_mix_ratio,
+        ),
+    :ARG_S_max_CliMA =
+        max_supersaturation.(
+            :mode_N,
+            :mode_mean,
+            :mode_stdev,
+            :mode_kappa,
+            :velocity,
+            :initial_temperature,
+            :initial_pressure,
+            :initial_vapor_mix_ratio,
+        )
+)
+
+CSV.write(dataset_filename, df)
