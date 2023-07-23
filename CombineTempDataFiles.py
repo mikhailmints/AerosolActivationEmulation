@@ -20,8 +20,9 @@ for temp_filename in os.listdir(in_dir):
     if os.path.exists(out_filename):
         with open(out_filename, "r") as prev_file:
             prev_df = pd.read_csv(prev_file)
-        max_prev_id = max(prev_df["simulation_id"])
-        df["simulation_id"] += max_prev_id + 1
+        if "simulation_id" in prev_df.keys():
+            max_prev_id = max(prev_df["simulation_id"])
+            df["simulation_id"] += max_prev_id + 1
         df.to_csv(out_filename, mode="a", index=False, header=False)
     else:
         df.to_csv(out_filename, index=False)

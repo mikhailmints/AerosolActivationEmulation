@@ -5,6 +5,7 @@ import timeout_decorator
 import argparse
 import pickle
 import pandas as pd
+import pyrcel
 from PySDM import Formulae
 from MyParcelSimulation import MyParcelSimulation
 from MyParcelSettings import MyParcelSettings
@@ -13,11 +14,9 @@ from PySDM.initialisation.spectra import Lognormal
 
 
 N_SD = 1000
-MAX_DZ_PARCEL = 1 * si.m
-MAX_DT_PARCEL = 10 * si.s
+DZ_PARCEL = 1 * si.m
 Z_MAX_PARCEL = 1000 * si.m
 
-SIMULATION_TIMEOUT = 5 * 60
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -26,16 +25,20 @@ if __name__ == "__main__":
     parser.add_argument("--fail_filename", default=None)
     parser.add_argument("--save_period", default=5)
     parser.add_argument("--log_filename", default=None)
+    parser.add_argument("--process_name", default=os.getpid())
+    parser.add_argument("--simulation_timeout", default=None)
 
     args = parser.parse_args()
 
-    log_filename = args.log_filename
+    LOG_FILENAME = args.log_filename
+    PROCESS_NAME = args.process_name
+    SIMULATION_TIMEOUT = float(args.simulation_timeout)
 
 
 def process_print(s):
     print(
-        f"Process {os.getpid()}: {s}",
-        file=open(log_filename, "a") if log_filename else None,
+        f"Process {PROCESS_NAME}: {s}",
+        file=open(LOG_FILENAME, "a") if LOG_FILENAME else None,
     )
 
 
@@ -77,8 +80,11 @@ def generate_data_one_simulation(
 ):
     initial_params = locals()
 
+    dt = DZ_PARCEL / velocity
+    t_max = Z_MAX_PARCEL / velocity
+
     settings = MyParcelSettings(
-        dt=min(MAX_DZ_PARCEL / velocity, MAX_DT_PARCEL),
+        dt=dt,
         n_sd_per_mode=(N_SD,),
         aerosol_modes_by_kappa={
             mode_kappa: Lognormal(
@@ -89,15 +95,26 @@ def generate_data_one_simulation(
         initial_pressure=initial_pressure,
         initial_temperature=initial_temperature,
         initial_relative_humidity=1,
-        t_max=Z_MAX_PARCEL / velocity,
+        t_max=t_max,
         formulae=Formulae(constants={"MAC": mac}),
     )
 
     initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
 
+    pyrcel_aerosols = [pyrcel.AerosolSpecies("mode1", distribution=pyrcel.Lognorm(mode_mean, mode_stdev, mode_N),
+                                             kappa=mode_kappa, bins=N_SD)]
+
     try:
         simulation = MyParcelSimulation(settings)
-        results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(simulation.run)()
+        if SIMULATION_TIMEOUT:
+            results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(simulation.run)()
+        else:
+            results = simulation.run()
+        
+        pyrcel_model = pyrcel.ParcelModel(pyrcel_aerosols, velocity, initial_temperature, 0, initial_pressure)
+
+        parcel_out, aerosol_out = pyrcel_model.run(t_end=t_max, output_dt=dt, solver_dt=dt, solver="cvode", terminate=True)
+
     except (RuntimeError, timeout_decorator.TimeoutError) as err:
         process_print(err)
         initial_params["error"] = str(err).strip("\"'")

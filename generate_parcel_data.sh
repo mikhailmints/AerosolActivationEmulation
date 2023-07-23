@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --time=5:00:00
+#SBATCH --time=10:00:00
 #SBATCH -n100
 #SBATCH -N5
 #SBATCH --mem-per-cpu=5G
@@ -40,7 +40,9 @@ do
     --sample_filename="datasets/temp/samples/sample${I}.pkl" \
     --save_period=5 \
     --log_filename=slurm.out \
-    --fail_filename="datasets/temp/fail/temp_dataset${I}_fail.csv" &
+    --fail_filename="datasets/temp/fail/temp_dataset${I}_fail.csv" \
+    --process_name=$I \
+    --simulation_timeout=1000 &
 done
 
 wait
