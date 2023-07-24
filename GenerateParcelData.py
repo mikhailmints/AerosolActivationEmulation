@@ -12,7 +12,7 @@ from PySDM.physics import si
 from PySDM.initialisation.spectra import Lognormal
 
 
-N_SD = 1000
+N_SD = 100
 DZ_PARCEL = 1 * si.m
 Z_MAX_PARCEL = 1000 * si.m
 

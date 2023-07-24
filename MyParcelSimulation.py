@@ -172,7 +172,7 @@ class MyParcelSimulation:
             )
         }
         while True:
-            print(".", end="")
+            # print(".", end="")
             self.particulator.run(steps=1)
             self._save(output)
             if output["time"][-1] > self.settings.t_max:

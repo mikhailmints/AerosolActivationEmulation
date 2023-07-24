@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --time=10:00:00
+#SBATCH --time=05:00:00
 #SBATCH -n100
 #SBATCH -N5
 #SBATCH --mem-per-cpu=5G
@@ -21,16 +21,18 @@ echo "NUM_SIM: $NUM_SIM"
 echo "OUT_FILE: $OUT_FILE"
 echo "FAIL_FILE: $FAIL_FILE"
 
-
 # Remove any previous temp files, create new temp directories
 rm -rf datasets/temp/
 mkdir -p datasets/temp/samples
 mkdir -p datasets/temp/success
 mkdir -p datasets/temp/fail
 
+echo "Sampling parameters"
+
 # Sample the input parameters, splitting between processes, save to separate pkl files 
 python3 SampleParcelParameters.py datasets/temp/samples --num_simulations=$NUM_SIM --num_processes=$SLURM_NPROCS
 
+echo "Starting simulations"
 
 # Run multiple simulations in parallel
 for ((I=1; I<=$SLURM_NPROCS; I++)) 
@@ -47,10 +49,11 @@ done
 
 wait
 
+echo "Combining data files"
+
 # Combine the temp files into final output files
 python3 CombineTempDataFiles.py datasets/temp/success $OUT_FILE
 python3 CombineTempDataFiles.py datasets/temp/fail $FAIL_FILE
-
 
 echo "Done"
 
