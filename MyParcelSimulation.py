@@ -52,7 +52,7 @@ class MyParcelSimulation:
         attributes = {
             k: np.empty(0) for k in ("dry volume", "kappa times dry volume", "n")
         }
-        for i, (kappa, spectrum) in enumerate(settings.aerosol_modes_by_kappa.items()):
+        for i, (kappa, spectrum) in enumerate(settings.aerosol_modes_by_kappa):
             sampling = Logarithmic(spectrum)
             r_dry, n_per_volume = sampling.sample(settings.n_sd_per_mode[i])
             v_dry = settings.formulae.trivia.volume(radius=r_dry)

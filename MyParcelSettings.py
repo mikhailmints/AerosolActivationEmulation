@@ -2,7 +2,7 @@
 Adapted from PySDM_examples.Pyrcel
 """
 
-from typing import Dict
+from typing import Iterable, Tuple
 
 import numpy as np
 from pystrict import strict
@@ -17,7 +17,7 @@ class MyParcelSettings:
         self,
         dt: float,
         n_sd_per_mode: tuple,
-        aerosol_modes_by_kappa: Dict[float, Spectrum],
+        aerosol_modes_by_kappa: Iterable[Tuple[float, Spectrum]],
         vertical_velocity: float,
         initial_temperature: float,
         initial_pressure: float,

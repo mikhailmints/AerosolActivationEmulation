@@ -89,11 +89,12 @@ def generate_data_one_simulation(
     settings = MyParcelSettings(
         dt=dt,
         n_sd_per_mode=(N_SD,),
-        aerosol_modes_by_kappa={
-            mode_kappa: Lognormal(
-                norm_factor=mode_N, m_mode=mode_mean, s_geom=mode_stdev
+        aerosol_modes_by_kappa=[
+            (
+                mode_kappa,
+                Lognormal(norm_factor=mode_N, m_mode=mode_mean, s_geom=mode_stdev),
             )
-        },
+        ],
         vertical_velocity=velocity,
         initial_pressure=initial_pressure,
         initial_temperature=initial_temperature,
