@@ -12,7 +12,7 @@ from PySDM.physics import si
 from PySDM.initialisation.spectra import Lognormal
 
 
-N_SD = 100
+N_SD = 1000
 DZ_PARCEL = 1 * si.m
 Z_MAX_PARCEL = 1000 * si.m
 
@@ -24,13 +24,17 @@ if __name__ == "__main__":
     parser.add_argument("--fail_filename", default=None)
     parser.add_argument("--save_period", default=5)
     parser.add_argument("--log_filename", default=None)
-    parser.add_argument("--process_name", default=os.getpid())
+    parser.add_argument("--process_name", default=None)
     parser.add_argument("--simulation_timeout", default=None)
 
     args = parser.parse_args()
 
     LOG_FILENAME = args.log_filename
-    PROCESS_NAME = args.process_name
+    PROCESS_NAME = (
+        os.getpid()
+        if args.process_name is None
+        else f"{args.process_name} (PID {os.getpid()})"
+    )
     SIMULATION_TIMEOUT = float(args.simulation_timeout)
 
 
@@ -103,7 +107,9 @@ def generate_data_one_simulation(
     try:
         simulation = MyParcelSimulation(settings)
         if SIMULATION_TIMEOUT:
-            results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(simulation.run)()
+            results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(
+                simulation.run
+            )()
         else:
             results = simulation.run()
     except (RuntimeError, timeout_decorator.TimeoutError) as err:
@@ -111,7 +117,7 @@ def generate_data_one_simulation(
         initial_params["error"] = str(err).strip("\"'")
         result = pd.DataFrame(initial_params, index=[0])
         return result, False
-         
+
     products = results["products"]
     n_rows = len(list(products.values())[0])
 
