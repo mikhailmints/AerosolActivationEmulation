@@ -31,6 +31,7 @@ class MyParcelSimulation:
         equilibrate=True,
         early_stop=True,
         max_iterations_without_increasing_smax=5,
+        console=False,
     ):
         env = Parcel(
             dt=settings.timestep,
@@ -100,11 +101,11 @@ class MyParcelSimulation:
             ),
         }
         self.settings = settings
-
         self.early_stop = early_stop
         self.max_iterations_without_increasing_smax = (
             max_iterations_without_increasing_smax
         )
+        self.console = console
 
         self.__sanity_checks(attributes, volume)
 
@@ -115,7 +116,7 @@ class MyParcelSimulation:
             sum(attributes["n"]) / volume,
             sum(
                 mode.norm_factor
-                for mode in self.settings.aerosol_modes_by_kappa.values()
+                for _, mode in self.settings.aerosol_modes_by_kappa
             ),
             significant=4,
         )
@@ -172,7 +173,8 @@ class MyParcelSimulation:
             )
         }
         while True:
-            # print(".", end="")
+            if self.console:
+                print(".", end="")
             self.particulator.run(steps=1)
             self._save(output)
             if output["time"][-1] > self.settings.t_max:
