@@ -25,6 +25,7 @@ class MyParcelSimulation:
         self,
         settings,
         scipy_solver=False,
+        scipy_rtol=1e-10,
         rtol_thd=1e-10,
         rtol_x=1e-10,
         dt_cond_range=(1e-4 * si.second, 1 * si.second),
@@ -48,11 +49,14 @@ class MyParcelSimulation:
         builder.add_dynamic(
             Condensation(rtol_thd=rtol_thd, rtol_x=rtol_x, dt_cond_range=dt_cond_range)
         )
+        builder.request_attribute("critical supersaturation")
 
         volume = env.mass_of_dry_air / settings.initial_air_density
         attributes = {
             k: np.empty(0) for k in ("dry volume", "kappa times dry volume", "n")
         }
+        self.mode_ids = np.empty(0, dtype=np.int32)
+        self.num_modes = len(settings.aerosol_modes_by_kappa)
         for i, (kappa, spectrum) in enumerate(settings.aerosol_modes_by_kappa):
             sampling = Logarithmic(spectrum)
             r_dry, n_per_volume = sampling.sample(settings.n_sd_per_mode[i])
@@ -61,6 +65,9 @@ class MyParcelSimulation:
             attributes["dry volume"] = np.append(attributes["dry volume"], v_dry)
             attributes["kappa times dry volume"] = np.append(
                 attributes["kappa times dry volume"], v_dry * kappa
+            )
+            self.mode_ids = np.append(
+                self.mode_ids, np.full(settings.n_sd_per_mode[i], i, dtype=np.int32)
             )
         if equilibrate:
             r_wet = equilibrate_wet_radii(
@@ -83,13 +90,12 @@ class MyParcelSimulation:
             ),
             PySDM_products.WaterMixingRatio(name="water_mix_ratio"),
             PySDM_products.PeakSupersaturation(name="S_max"),
-            PySDM_products.ActivableFraction(name="act_frac_product"),
-            PySDM_products.ActivatingRate(name="act_rate"),
         )
 
         self.particulator = builder.build(attributes=attributes, products=products)
 
         if scipy_solver:
+            scipy_ode_condensation_solver.rtol = scipy_rtol
             scipy_ode_condensation_solver.patch_particulator(self.particulator)
 
         self.output_attributes = {
@@ -114,10 +120,7 @@ class MyParcelSimulation:
             assert attribute.shape[0] == self.particulator.n_sd
         np.testing.assert_approx_equal(
             sum(attributes["n"]) / volume,
-            sum(
-                mode.norm_factor
-                for _, mode in self.settings.aerosol_modes_by_kappa
-            ),
+            sum(mode.norm_factor for _, mode in self.settings.aerosol_modes_by_kappa),
             significant=4,
         )
 
@@ -127,48 +130,56 @@ class MyParcelSimulation:
             for drop_id in range(self.particulator.n_sd):
                 attr[drop_id].append(attr_data[drop_id])
         for k, v in self.particulator.products.items():
-            if k == "act_frac_product":
-                continue
             value = v.get()
             if isinstance(value, np.ndarray) and value.shape[0] == 1:
                 value = value[0]
             output[k].append(value)
         if np.isnan(output["S_max"][-1]):
             output["S_max"][-1] = output["RH"][-1] - 1
-        output["act_frac_product"].append(
-            self.particulator.products["act_frac_product"].get(
-                S_max=output["S_max"][-1] * 100
-            )[0]
-        )  # https://github.com/open-atmos/PySDM/issues/753
-        act_num_S = 0
-        act_num_V = 0
+        act_num_S = np.zeros(self.num_modes)
+        act_num_V = np.zeros(self.num_modes)
+        total_multiplicity = np.zeros(self.num_modes)
         max_RH = 1 + np.max(output["S_max"])
-        volumes = np.array(self.output_attributes["volume"])[:, -1]
+        volumes = np.array(
+            [
+                np.array(self.output_attributes["volume"])[self.mode_ids == i, -1]
+                for i in range(self.num_modes)
+            ]
+        )
         radii = self.settings.formulae.trivia.radius(volumes)
         for drop_id in range(self.particulator.n_sd):
+            multiplicity = self.output_attributes["n"][drop_id][-1]
+            total_multiplicity[self.mode_ids[drop_id]] += multiplicity
             if self.output_attributes["critical supersaturation"][drop_id][-1] < max_RH:
-                act_num_S += self.output_attributes["n"][drop_id][-1]
+                act_num_S[self.mode_ids[drop_id]] += multiplicity
             if (
                 self.output_attributes["critical volume"][drop_id][-1]
-                < volumes[drop_id]
+                < self.output_attributes["volume"][drop_id][-1]
             ):
-                act_num_V += self.output_attributes["n"][drop_id][-1]
-        total_multiplicity = np.sum(np.array(self.output_attributes["n"])[:, -1])
-        output["act_frac_S"].append(act_num_S / total_multiplicity)
-        output["act_frac_V"].append(act_num_V / total_multiplicity)
-        output["mode_wet_radius_mean"].append(scipy.stats.gmean(radii))
-        output["mode_wet_radius_stdev"].append(scipy.stats.gstd(radii))
+                act_num_V[self.mode_ids[drop_id]] += multiplicity
+        for i in range(self.num_modes):
+            output[f"mode_{i + 1}_act_frac_S"].append(
+                act_num_S[i] / total_multiplicity[i]
+            )
+            output[f"mode_{i + 1}_act_frac_V"].append(
+                act_num_V[i] / total_multiplicity[i]
+            )
+            output[f"mode_{i + 1}_wet_radius_mean"].append(scipy.stats.gmean(radii[i]))
+            output[f"mode_{i + 1}_wet_radius_stdev"].append(scipy.stats.gstd(radii[i]))
 
     def run(self):
         output = {
             k: []
             for k in itertools.chain(
                 self.particulator.products,
-                (
-                    "act_frac_S",
-                    "act_frac_V",
-                    "mode_wet_radius_mean",
-                    "mode_wet_radius_stdev",
+                *(
+                    (
+                        f"mode_{i + 1}_act_frac_S",
+                        f"mode_{i + 1}_act_frac_V",
+                        f"mode_{i + 1}_wet_radius_mean",
+                        f"mode_{i + 1}_wet_radius_stdev",
+                    )
+                    for i in range(self.num_modes)
                 ),
             )
         }

@@ -8,29 +8,44 @@ import numpy as np
 from pystrict import strict
 
 from PySDM import Formulae
-from PySDM.initialisation.impl.spectrum import Spectrum
+from PySDM.initialisation.spectra import Lognormal
 
 
 @strict
 class MyParcelSettings:
     def __init__(
         self,
-        dt: float,
-        n_sd_per_mode: tuple,
-        aerosol_modes_by_kappa: Iterable[Tuple[float, Spectrum]],
-        vertical_velocity: float,
+        mode_Ns: Iterable[float],
+        mode_means: Iterable[float],
+        mode_stdevs: Iterable[float],
+        mode_kappas: Iterable[float],
+        velocity: float,
         initial_temperature: float,
         initial_pressure: float,
-        initial_relative_humidity: float,
+        dt: float,
         t_max: float,
-        formulae: Formulae,
+        n_sd_per_mode: float | Iterable[float],
+        initial_relative_humidity: float = 1,
+        formulae: Formulae = Formulae(),
     ):
         self.formulae = formulae
-        self.n_sd_per_mode = n_sd_per_mode
-        self.aerosol_modes_by_kappa = aerosol_modes_by_kappa
+        self.n_sd_per_mode = (
+            n_sd_per_mode
+            if isinstance(n_sd_per_mode, Iterable)
+            else (n_sd_per_mode,) * len(mode_Ns)
+        )
+        self.aerosol_modes_by_kappa = [
+            (
+                mode_kappa,
+                Lognormal(norm_factor=mode_N, m_mode=mode_mean, s_geom=mode_stdev),
+            )
+            for (mode_N, mode_mean, mode_stdev, mode_kappa) in zip(
+                mode_Ns, mode_means, mode_stdevs, mode_kappas
+            )
+        ]
 
         const = self.formulae.constants
-        self.vertical_velocity = vertical_velocity
+        self.vertical_velocity = velocity
         self.initial_pressure = initial_pressure
         self.initial_temperature = initial_temperature
         pv0 = (

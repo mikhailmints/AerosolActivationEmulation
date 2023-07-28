@@ -5,17 +5,21 @@ import timeout_decorator
 import argparse
 import pickle
 import pandas as pd
-from PySDM import Formulae
 from my_parcel_simulation import MyParcelSimulation
 from my_parcel_settings import MyParcelSettings
 from PySDM.physics import si
-from PySDM.initialisation.spectra import Lognormal
 
 
-N_SD = 1000
+N_SD = 100
 DZ_PARCEL = 1 * si.m
-Z_MAX_PARCEL = 1000 * si.m
+# if infinity, don't force the parcel to stop until it reaches a
+# supersaturation peak and rely on timeouts to stop the ones that don't.
+Z_MAX_PARCEL = 1000
 
+# this is here for testing functions from outside without command-line args
+SIMULATION_TIMEOUT = None
+LOG_FILENAME = None
+PROCESS_NAME = os.getpid()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -70,49 +74,72 @@ def save_data(result_df, out_filename):
             break
 
 
+def run_simulation(simulation):
+    if SIMULATION_TIMEOUT:
+        return timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(
+            simulation.run
+        )()
+    else:
+        assert Z_MAX_PARCEL < np.inf
+    return simulation.run()
+
+
 # Run one parcel simulation, output the data for all timesteps
 def generate_data_one_simulation(
-    mode_N,
-    mode_mean,
-    mode_stdev,
-    mode_kappa,
+    mode_Ns,
+    mode_means,
+    mode_stdevs,
+    mode_kappas,
     velocity,
     initial_temperature,
     initial_pressure,
-    mac,
 ):
-    initial_params = locals()
+    initial_params = {
+        k: v
+        for d in (
+            {
+                f"mode_{i + 1}_N": mode_N,
+                f"mode_{i + 1}_mean": mode_mean,
+                f"mode_{i + 1}_stdev": mode_stdev,
+                f"mode_{i + 1}_kappa": mode_kappa,
+            }
+            for i, (mode_N, mode_mean, mode_stdev, mode_kappa) in enumerate(
+                zip(mode_Ns, mode_means, mode_stdevs, mode_kappas)
+            )
+        )
+        for k, v in d.items()
+    } | {
+        "velocity": velocity,
+        "initial_temperature": initial_temperature,
+        "initial_pressure": initial_pressure,
+    }
 
     dt = DZ_PARCEL / velocity
     t_max = Z_MAX_PARCEL / velocity
 
     settings = MyParcelSettings(
-        dt=dt,
-        n_sd_per_mode=(N_SD,),
-        aerosol_modes_by_kappa=[
-            (
-                mode_kappa,
-                Lognormal(norm_factor=mode_N, m_mode=mode_mean, s_geom=mode_stdev),
-            )
-        ],
-        vertical_velocity=velocity,
-        initial_pressure=initial_pressure,
+        mode_Ns=mode_Ns,
+        mode_means=mode_means,
+        mode_stdevs=mode_stdevs,
+        mode_kappas=mode_kappas,
+        velocity=velocity,
         initial_temperature=initial_temperature,
-        initial_relative_humidity=1,
+        initial_pressure=initial_pressure,
+        dt=dt,
         t_max=t_max,
-        formulae=Formulae(constants={"MAC": mac}),
+        n_sd_per_mode=N_SD,
     )
 
     initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
 
     try:
         simulation = MyParcelSimulation(settings)
-        if SIMULATION_TIMEOUT:
-            results = timeout_decorator.timeout(SIMULATION_TIMEOUT, use_signals=False)(
-                simulation.run
-            )()
-        else:
-            results = simulation.run()
+        try:
+            results = run_simulation(simulation)
+        except RuntimeError as err:
+            process_print(f"{err}: Retrying with SciPy condensation solver")
+            simulation = MyParcelSimulation(settings, scipy_solver=True)
+            results = run_simulation(simulation)
     except (RuntimeError, timeout_decorator.TimeoutError) as err:
         process_print(err)
         initial_params["error"] = str(err).strip("\"'")
@@ -144,20 +171,15 @@ def generate_data(parameters, out_filename, fail_filename, save_period):
 
     for i in range(len(parameters)):
         process_print(f"Simulation {i + 1} / {num_simulations}")
-        (
-            log_mode_N,
-            log_mode_mean,
-            mode_stdev,
-            mode_kappa,
-            log_velocity,
-            initial_temperature,
-            initial_pressure,
-        ) = parameters[i]
+        log_velocity, initial_temperature, initial_pressure = parameters[i][-3:]
+        log_mode_Ns, log_mode_means, mode_stdevs, mode_kappas = (
+            parameters[i][:-3].reshape(-1, 4).T
+        )
         simulation_df, success = generate_data_one_simulation(
-            mode_N=10**log_mode_N * si.cm**-3,
-            mode_mean=10**log_mode_mean * si.um,
-            mode_stdev=mode_stdev,
-            mode_kappa=mode_kappa,
+            mode_Ns=10**log_mode_Ns * si.cm**-3,
+            mode_means=10**log_mode_means * si.um,
+            mode_stdevs=mode_stdevs,
+            mode_kappas=mode_kappas,
             velocity=10**log_velocity * si.m / si.s,
             initial_temperature=initial_temperature * si.kelvin,
             initial_pressure=initial_pressure * si.pascal,
