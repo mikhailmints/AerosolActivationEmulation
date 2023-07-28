@@ -6,8 +6,8 @@ import argparse
 import pickle
 import pandas as pd
 from PySDM import Formulae
-from MyParcelSimulation import MyParcelSimulation
-from MyParcelSettings import MyParcelSettings
+from my_parcel_simulation import MyParcelSimulation
+from my_parcel_settings import MyParcelSettings
 from PySDM.physics import si
 from PySDM.initialisation.spectra import Lognormal
 

@@ -30,14 +30,14 @@ mkdir -p datasets/temp/fail
 echo "Sampling parameters"
 
 # Sample the input parameters, splitting between processes, save to separate pkl files 
-python3 SampleParcelParameters.py datasets/temp/samples --num_simulations=$NUM_SIM --num_processes=$SLURM_NPROCS
+python3 sample_parcel_parameters.py datasets/temp/samples --num_simulations=$NUM_SIM --num_processes=$SLURM_NPROCS
 
 echo "Starting simulations"
 
 # Run multiple simulations in parallel
 for ((I=1; I<=$SLURM_NPROCS; I++)) 
 do
-    srun -N1 -n1 --exclusive python3 GenerateParcelData.py \
+    srun -N1 -n1 --exclusive python3 generate_parcel_data.py \
     --out_filename="datasets/temp/success/temp_dataset${I}.csv" \
     --sample_filename="datasets/temp/samples/sample${I}.pkl" \
     --save_period=5 \
@@ -52,8 +52,8 @@ wait
 echo "Combining data files"
 
 # Combine the temp files into final output files
-python3 CombineTempDataFiles.py datasets/temp/success $OUT_FILE
-python3 CombineTempDataFiles.py datasets/temp/fail $FAIL_FILE
+python3 combine_temp_data_files.py datasets/temp/success $OUT_FILE
+python3 combine_temp_data_files.py datasets/temp/fail $FAIL_FILE
 
 echo "Done"
 
