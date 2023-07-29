@@ -140,7 +140,7 @@ def generate_data_one_simulation(
             process_print(f"{err}: Retrying with SciPy condensation solver")
             simulation = MyParcelSimulation(settings, scipy_solver=True)
             results = run_simulation(simulation)
-    except (RuntimeError, timeout_decorator.TimeoutError) as err:
+    except Exception as err:
         process_print(err)
         initial_params["error"] = str(err).strip("\"'")
         result = pd.DataFrame(initial_params, index=[0])
@@ -183,7 +183,6 @@ def generate_data(parameters, out_filename, fail_filename, save_period):
             velocity=10**log_velocity * si.m / si.s,
             initial_temperature=initial_temperature * si.kelvin,
             initial_pressure=initial_pressure * si.pascal,
-            mac=1,
         )
         if success:
             # Only take data at the time of maximum supersaturation

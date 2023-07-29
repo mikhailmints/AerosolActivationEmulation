@@ -11,6 +11,7 @@
 
 OUT_FILE=$1 # file to which final results will be written
 NUM_SIM=$2 # number of simulations to run in total
+NUM_MODES=$3 # number of aerosol distribution modes
 
 FAIL_FILE="${OUT_FILE%.*}_fail.${OUT_FILE##*.}" # file to which all failed runs will be written
 
@@ -30,7 +31,7 @@ mkdir -p datasets/temp/fail
 echo "Sampling parameters"
 
 # Sample the input parameters, splitting between processes, save to separate pkl files 
-python3 sample_parcel_parameters.py datasets/temp/samples --num_simulations=$NUM_SIM --num_processes=$SLURM_NPROCS
+python3 sample_parcel_parameters.py datasets/temp/samples --num_simulations=$NUM_SIM --num_modes=$NUM_MODES --num_processes=$SLURM_NPROCS
 
 echo "Starting simulations"
 
