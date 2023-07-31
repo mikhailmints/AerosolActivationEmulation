@@ -14,7 +14,7 @@ N_SD = 100
 DZ_PARCEL = 1 * si.m
 # if infinity, don't force the parcel to stop until it reaches a
 # supersaturation peak and rely on timeouts to stop the ones that don't.
-Z_MAX_PARCEL = 1000
+Z_MAX_PARCEL = np.inf
 
 # this is here for testing functions from outside without command-line args
 SIMULATION_TIMEOUT = None
@@ -134,11 +134,16 @@ def generate_data_one_simulation(
 
     try:
         simulation = MyParcelSimulation(settings)
+        initial_params["solver"] = "PySDM"
         try:
             results = run_simulation(simulation)
         except RuntimeError as err:
             process_print(f"{err}: Retrying with SciPy condensation solver")
-            simulation = MyParcelSimulation(settings, scipy_solver=True)
+            simulation = MyParcelSimulation(
+                settings,
+                scipy_solver=True,
+            )
+            initial_params["solver"] = "SciPy"
             results = run_simulation(simulation)
     except Exception as err:
         process_print(err)
@@ -213,4 +218,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as err:
+        process_print(err)
+        raise
