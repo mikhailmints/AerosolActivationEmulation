@@ -39,17 +39,17 @@ function MLJFlux.build(builder::MyFluxBuilder, rng, n_in, n_out)
         Flux.Dropout(builder.dropout2),
         Flux.Dense(builder.n2 => builder.n3, Flux.relu, init = init),
         Flux.Dropout(builder.dropout3),
-        Flux.Dense(builder.n3 => n_out, Flux.sigmoid, init = init),
+        Flux.Dense(builder.n3 => n_out, init = init),
     )
 end
 
 function NNModel()
     model = MultitargetNeuralNetworkRegressor(
         builder = MyFluxBuilder(50, 100, 30, 0.1, 0.3, 0.2),
-        optimiser = Flux.Optimise.Adam(0.0001, (0.9, 0.999), 1.0e-8),
-        epochs = 125,
+        optimiser = Flux.Optimise.Adam(0.001, (0.9, 0.999), 1.0e-8),
+        epochs = 200,
         loss = Flux.mse,
-        batch_size = 5,
+        batch_size = 50,
     )
     return model
 end

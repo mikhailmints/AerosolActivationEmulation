@@ -23,7 +23,7 @@ function get_num_modes(df::DataFrame)
     end
 end
 
-function ARG_activation_fraction(data_row::NamedTuple, num_modes)
+function ARG_scheme(data_row::NamedTuple, num_modes)
     mode_Ns = []
     mode_means = []
     mode_stdevs = []
@@ -66,13 +66,24 @@ function ARG_activation_fraction(data_row::NamedTuple, num_modes)
         q,
     )
     act_frac_per_mode = N_act_per_mode ./ mode_Ns
-    return act_frac_per_mode
+    max_supersaturation = AA.max_supersaturation(
+        param_set,
+        ad,
+        temperature,
+        pressure,
+        velocity,
+        q,
+    )
+    return (; act_frac_per_mode, max_supersaturation)
 end
 
-function read_aerosol_dataset(dataset_filename::String, keep_y_as_table::Bool)
+function read_aerosol_dataset(
+    dataset_filename::String,
+    keep_y_as_table::Bool = true,
+)
     df = DF.DataFrame(CSV.File(dataset_filename))
+    df = filter(row -> row.S_max > 0 && row.S_max < 0.2, df)
     selected_columns_X = []
-    selected_columns_Y = []
     num_modes = get_num_modes(df)
     for i in 1:num_modes
         append!(
@@ -84,7 +95,6 @@ function read_aerosol_dataset(dataset_filename::String, keep_y_as_table::Bool)
                 "mode_$(i)_kappa",
             ]),
         )
-        push!(selected_columns_Y, Symbol("mode_$(i)_act_frac_S"))
     end
     append!(
         selected_columns_X,
@@ -92,10 +102,12 @@ function read_aerosol_dataset(dataset_filename::String, keep_y_as_table::Bool)
     )
     X = df[:, selected_columns_X]
     if keep_y_as_table
-        Y = df[:, selected_columns_Y]
+        Y = DF.select(
+            DF.transform(df, :S_max => ByRow(log) => :log_S_max),
+            :log_S_max,
+        )
     else
-        @assert size(selected_columns_Y) == 1
-        Y = df.mode_1_act_frac_S
+        Y = log.(df.S_max)
     end
     return (X, Y)
 end
@@ -105,8 +117,8 @@ function preprocess_aerosol_data(X::DataFrame)
     X = DF.transform(
         X,
         AsTable(All()) =>
-            ByRow(x -> ARG_activation_fraction(x, num_modes))
-            => [Symbol("mode_$(i)_ARG_act_frac") for i in 1:num_modes],
+            ByRow(x -> log(ARG_scheme(x, num_modes).max_supersaturation)) =>
+                :log_ARG_S_max,
     )
     for i in 1:num_modes
         X = DF.transform(
@@ -115,7 +127,8 @@ function preprocess_aerosol_data(X::DataFrame)
         )
         X = DF.transform(
             X,
-            Symbol("mode_$(i)_mean") => ByRow(log) => Symbol("mode_$(i)_mean"),
+            Symbol("mode_$(i)_mean") =>
+                ByRow(log) => Symbol("mode_$(i)_mean"),
         )
     end
     X = DF.transform(X, :velocity => ByRow(log) => :velocity)
