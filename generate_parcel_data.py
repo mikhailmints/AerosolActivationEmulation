@@ -146,7 +146,7 @@ def generate_data_one_simulation(
             initial_params["solver"] = "SciPy"
             results = run_simulation(simulation)
     except Exception as err:
-        process_print(err)
+        process_print(f"{type(err).__name__}: {err}")
         initial_params["error"] = str(err).strip("\"'")
         result = pd.DataFrame(initial_params, index=[0])
         return result, False
@@ -169,25 +169,31 @@ def generate_data_one_simulation(
     return result, True
 
 
-def generate_data(parameters, out_filename, fail_filename, save_period):
+def generate_data(
+    parameters, out_filename, fail_filename, save_period, convert_units=True
+):
     result_df = pd.DataFrame()
 
     num_simulations = len(parameters)
 
     for i in range(len(parameters)):
         process_print(f"Simulation {i + 1} / {num_simulations}")
-        log_velocity, initial_temperature, initial_pressure = parameters[i][-3:]
-        log_mode_Ns, log_mode_means, mode_stdevs, mode_kappas = (
+        velocity, initial_temperature, initial_pressure = parameters[i][-3:]
+        mode_Ns, mode_means, mode_stdevs, mode_kappas = (
             parameters[i][:-3].reshape(-1, 4).T
         )
+        if convert_units:
+            mode_Ns = 10**mode_Ns * si.cm**-3
+            mode_means=10**mode_means * si.um
+            velocity=10**velocity * si.m / si.s
         simulation_df, success = generate_data_one_simulation(
-            mode_Ns=10**log_mode_Ns * si.cm**-3,
-            mode_means=10**log_mode_means * si.um,
+            mode_Ns=mode_Ns,
+            mode_means=mode_means,
             mode_stdevs=mode_stdevs,
             mode_kappas=mode_kappas,
-            velocity=10**log_velocity * si.m / si.s,
-            initial_temperature=initial_temperature * si.kelvin,
-            initial_pressure=initial_pressure * si.pascal,
+            velocity=velocity,
+            initial_temperature=initial_temperature,
+            initial_pressure=initial_pressure,
         )
         if success:
             # Only take data at the time of maximum supersaturation

@@ -79,7 +79,7 @@ end
 
 function read_aerosol_dataset(
     dataset_filename::String,
-    keep_y_as_table::Bool = true,
+    keep_y_as_table::Bool = false,
 )
     df = DF.DataFrame(CSV.File(dataset_filename))
     df = filter(row -> row.S_max > 0 && row.S_max < 0.2, df)

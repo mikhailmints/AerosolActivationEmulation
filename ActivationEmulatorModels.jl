@@ -4,8 +4,7 @@ import Flux
 
 Standardizer = MLJ.@load Standardizer pkg = MLJModels
 EvoTreeRegressor = MLJ.@load EvoTreeRegressor pkg = EvoTrees
-MultitargetNeuralNetworkRegressor =
-    MLJ.@load MultitargetNeuralNetworkRegressor pkg = MLJFlux
+NeuralNetworkRegressor = MLJ.@load NeuralNetworkRegressor pkg = MLJFlux
 
 function EvoTreeModel()
     model = EvoTreeRegressor()
@@ -44,7 +43,7 @@ function MLJFlux.build(builder::MyFluxBuilder, rng, n_in, n_out)
 end
 
 function NNModel()
-    model = MultitargetNeuralNetworkRegressor(
+    model = NeuralNetworkRegressor(
         builder = MyFluxBuilder(50, 100, 30, 0.1, 0.3, 0.2),
         optimiser = Flux.Optimise.Adam(0.001, (0.9, 0.999), 1.0e-8),
         epochs = 200,
