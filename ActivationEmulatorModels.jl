@@ -1,6 +1,9 @@
 import MLJ
 import MLJFlux
 import Flux
+import GaussianProcesses
+import StatsBase
+import Optim
 
 Standardizer = MLJ.@load Standardizer pkg = MLJModels
 EvoTreeRegressor = MLJ.@load EvoTreeRegressor pkg = EvoTrees
@@ -51,4 +54,36 @@ function NNModel()
         batch_size = 50,
     )
     return model
+end
+
+mutable struct MyGPRegressor <: MLJ.Deterministic
+
+end
+
+function MLJ.fit(model::MyGPRegressor, verbosity, X, y)
+    @info "Training GP model"
+    gps = []
+    for i in 1:1
+        @info "Iteration $(i)"
+        inds =
+            StatsBase.sample(1:DF.nrow(X), 100, replace = false, ordered = true)
+        Xu = X[inds, :]
+        gp = GaussianProcesses.SoR(
+            Matrix(X)',
+            Matrix(Xu)',
+            y,
+            GaussianProcesses.MeanZero(),
+            GaussianProcesses.Mat52Ard(fill(0.0, DF.ncol(X)), 0.0),
+            0.0,
+        )
+        GaussianProcesses.optimize!(gp)
+        push!(gps, gp)
+    end
+    return gps, nothing, nothing
+end
+
+function MLJ.predict(::MyGPRegressor, fitresult, Xnew)
+    return StatsBase.mean([
+        GaussianProcesses.predict_f(gp, Matrix(Xnew)')[1] for gp in fitresult
+    ])
 end

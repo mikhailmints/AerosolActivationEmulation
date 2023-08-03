@@ -189,17 +189,17 @@ class MyParcelSimulation:
         }
         reached_t_max = False
         while True:
-            if self.console:
-                print(".", end="")
             self.particulator.run(steps=1)
             self._save(output)
+            if self.console:
+                print(f"S_max: {output['S_max'][-1]}")
             if output["time"][-1] > self.settings.t_max:
                 reached_t_max = True
                 break
             if (
                 self.early_stop
                 and np.max(output["S_max"]) > 0
-                and output["S_max"].index(np.max(output["S_max"]))
+                and np.argmax(output["S_max"])
                 < len(output["S_max"]) - self.max_iterations_without_increasing_smax
             ):
                 break
