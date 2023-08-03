@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --time=05:00:00
+#SBATCH --time=12:00:00
 #SBATCH -n300
 #SBATCH -N10
 #SBATCH --mem-per-cpu=5G
@@ -44,11 +44,11 @@ for ((I = 1; I <= $SLURM_NPROCS; I++)); do
         --log_filename=slurm.out \
         --fail_filename="datasets/temp/fail/temp_dataset${I}_fail.csv" \
         --process_name=$I \
-        --simulation_timeout=300 &
+        --simulation_timeout=1000 &
 done
 
 while true; do
-    NUM_DONE=$(cat slurm.out | grep "Process [0-9]* (PID [0-9]*): Done" | wc -l)
+    NUM_DONE=$(cat slurm.out | grep -a "Process [0-9]* (PID [0-9]*): Done" | wc -l)
     if [ $NUM_DONE == $SLURM_NPROCS ]; then
         break
     fi

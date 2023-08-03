@@ -9,7 +9,7 @@ def sample_parameters(num_simulations, num_modes):
     mode_param_bounds = [
         (1, 4),  # log10(mode_N), cm^-3
         (-3, 1),  # log10(mode_mean), um
-        (1.5, 2),  # mode_stdev
+        (1.2, 3),  # mode_stdev
         (0, 1.5),  # mode_kappa
     ]
     param_bounds = (mode_param_bounds * num_modes) + [

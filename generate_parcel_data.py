@@ -10,11 +10,10 @@ from my_parcel_settings import MyParcelSettings
 from PySDM.physics import si
 
 
-N_SD = 100
-DZ_PARCEL = 1 * si.m
-# if infinity, don't force the parcel to stop until it reaches a
-# supersaturation peak and rely on timeouts to stop the ones that don't.
-Z_MAX_PARCEL = np.inf
+N_SD = 250
+DZ_PARCEL = 10 * si.m
+Z_MAX_PARCEL = 1000 * si.m
+INITIAL_RH = 0.99
 
 # this is here for testing functions from outside without command-line args
 SIMULATION_TIMEOUT = None
@@ -128,6 +127,7 @@ def generate_data_one_simulation(
         dt=dt,
         t_max=t_max,
         n_sd_per_mode=N_SD,
+        initial_relative_humidity=INITIAL_RH,
     )
 
     initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
@@ -150,6 +150,8 @@ def generate_data_one_simulation(
         initial_params["error"] = str(err).strip("\"'")
         result = pd.DataFrame(initial_params, index=[0])
         return result, False
+
+    initial_params["reached_z_max"] = results["reached_t_max"]
 
     products = results["products"]
     n_rows = len(list(products.values())[0])
@@ -184,8 +186,8 @@ def generate_data(
         )
         if convert_units:
             mode_Ns = 10**mode_Ns * si.cm**-3
-            mode_means=10**mode_means * si.um
-            velocity=10**velocity * si.m / si.s
+            mode_means = 10**mode_means * si.um
+            velocity = 10**velocity * si.m / si.s
         simulation_df, success = generate_data_one_simulation(
             mode_Ns=mode_Ns,
             mode_means=mode_means,
