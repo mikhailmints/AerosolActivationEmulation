@@ -57,15 +57,15 @@ function ARG_scheme(data_row::NamedTuple, num_modes)
         pv0 / TD.Parameters.molmass_ratio(thermo_params) / (pressure - pv0)
     q_vap = vapor_mix_ratio / (vapor_mix_ratio + 1)
     q = TD.PhasePartition(q_vap, FT(0), FT(0))
-    N_act_per_mode = AA.N_activated_per_mode(
-        param_set,
-        ad,
-        temperature,
-        pressure,
-        velocity,
-        q,
-    )
-    act_frac_per_mode = N_act_per_mode ./ mode_Ns
+    act_frac_per_mode =
+        AA.N_activated_per_mode(
+            param_set,
+            ad,
+            temperature,
+            pressure,
+            velocity,
+            q,
+        ) ./ mode_Ns
     max_supersaturation = AA.max_supersaturation(
         param_set,
         ad,
@@ -74,6 +74,19 @@ function ARG_scheme(data_row::NamedTuple, num_modes)
         velocity,
         q,
     )
+    # critical_supersaturation =
+    #     AA.critical_supersaturation(param_set, ad, temperature)
+    # act_frac_per_mode_from_S_max =
+    #     AA.N_activated_per_mode(
+    #         param_set,
+    #         ad,
+    #         temperature,
+    #         pressure,
+    #         velocity,
+    #         q,
+    #         data_row.S_max,
+    #         critical_supersaturation,
+    #     ) ./ mode_Ns
     return (; act_frac_per_mode, max_supersaturation)
 end
 
