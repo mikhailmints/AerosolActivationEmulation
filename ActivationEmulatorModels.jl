@@ -4,6 +4,9 @@ import Flux
 import GaussianProcesses
 import StatsBase
 import Optim
+import QuasiMonteCarlo
+import Distributions
+import SpecialFunctions
 
 Standardizer = MLJ.@load Standardizer pkg = MLJModels
 EvoTreeRegressor = MLJ.@load EvoTreeRegressor pkg = EvoTrees
@@ -56,6 +59,19 @@ function NNModel()
     return model
 end
 
+# mutable struct BetaLik <: GaussianProcesses.Likelihood
+#     p::Float64
+#     q::Float64
+#     priors::Array
+
+#     BetaLik(p::Float64, q::Float64) = new(p, q, [])
+# end
+
+# function GaussianProcesses.log_dens(beta::BetaLik, f::AbstractVector, y::AbstractVector)
+#     return -SpecialFunctions.logbeta(beta.p, beta.q) + (beta.p - 1) * log()
+# end
+
+
 mutable struct MyGPRegressor <: MLJ.Deterministic
 
 end
@@ -65,16 +81,31 @@ function MLJ.fit(model::MyGPRegressor, verbosity, X, y)
     gps = []
     for i in 1:1
         @info "Iteration $(i)"
-        inds =
-            StatsBase.sample(1:DF.nrow(X), 100, replace = false, ordered = true)
-        Xu = X[inds, :]
+        # weights = StatsBase.Weights([
+        #     Distributions.pdf(Distributions.Normal(0.0, 0.5), x) for
+        #     x in X.mode_1_ARG_act_frac
+        # ])
+        inds1 = StatsBase.sample(
+            1:DF.nrow(X),
+            #weights,
+            1000,
+            replace = false,
+            ordered = true,
+        )
+        inds2 = StatsBase.sample(
+            1:DF.nrow(X),
+            #weights,
+            50,
+            replace = false,
+            ordered = true,
+        )
         gp = GaussianProcesses.SoR(
             Matrix(X)',
-            Matrix(Xu)',
+            Matrix(X[inds2, :])',
             y,
             GaussianProcesses.MeanZero(),
-            GaussianProcesses.Mat52Ard(fill(0.0, DF.ncol(X)), 0.0),
-            0.0,
+            GaussianProcesses.Mat52Ard(fill(2.0, DF.ncol(X)), 0.0),
+            2.0,
         )
         GaussianProcesses.optimize!(gp)
         push!(gps, gp)

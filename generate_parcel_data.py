@@ -10,7 +10,7 @@ from my_parcel_settings import MyParcelSettings
 from PySDM.physics import si
 
 
-N_SD = 250
+N_SD = 1000
 DZ_PARCEL = 10 * si.m
 Z_MAX_PARCEL = 1000 * si.m
 INITIAL_RH = 0.99
@@ -181,13 +181,21 @@ def generate_data(
     for i in range(len(parameters)):
         process_print(f"Simulation {i + 1} / {num_simulations}")
         velocity, initial_temperature, initial_pressure = parameters[i][-3:]
-        mode_Ns, mode_means, mode_stdevs, mode_kappas = (
+        mode_Ns_or_vol_fracs, mode_means, mode_stdevs, mode_kappas = (
             parameters[i][:-3].reshape(-1, 4).T
         )
         if convert_units:
-            mode_Ns = 10**mode_Ns * si.cm**-3
-            mode_means = 10**mode_means * si.um
-            velocity = 10**velocity * si.m / si.s
+            mode_vol_fracs = 10**mode_Ns_or_vol_fracs
+            mode_means = 10**mode_means
+            velocity = 10**velocity
+            # Use 3rd moment of lognormal distribution to convert volume fraction
+            # to number concentration
+            mode_Ns = mode_vol_fracs / (
+                (4 / 3 * np.pi)
+                * np.exp(3 * np.log(mode_means) + 0.5 * 9 * np.log(mode_stdevs) ** 2)
+            )
+        else:
+            mode_Ns = mode_Ns_or_vol_fracs
         simulation_df, success = generate_data_one_simulation(
             mode_Ns=mode_Ns,
             mode_means=mode_means,

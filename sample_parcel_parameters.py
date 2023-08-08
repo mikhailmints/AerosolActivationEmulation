@@ -4,11 +4,10 @@ import pickle
 from scipy.stats import qmc
 import os
 
-
 def sample_parameters(num_simulations, num_modes):
     mode_param_bounds = [
-        (1, 4),  # log10(mode_N), cm^-3
-        (-3, 1),  # log10(mode_mean), um
+        (-18, -8),  # log10(mode_vol_frac)
+        (-9, -5),  # log10(mode_mean), m
         (1.2, 3),  # mode_stdev
         (0, 1.5),  # mode_kappa
     ]

@@ -23,7 +23,7 @@ function get_num_modes(df::DataFrame)
     end
 end
 
-function ARG_scheme(data_row::NamedTuple, num_modes)
+function convert_to_ARG_params(data_row::NamedTuple, num_modes::Integer)
     mode_Ns = []
     mode_means = []
     mode_stdevs = []
@@ -57,15 +57,12 @@ function ARG_scheme(data_row::NamedTuple, num_modes)
         pv0 / TD.Parameters.molmass_ratio(thermo_params) / (pressure - pv0)
     q_vap = vapor_mix_ratio / (vapor_mix_ratio + 1)
     q = TD.PhasePartition(q_vap, FT(0), FT(0))
-    act_frac_per_mode =
-        AA.N_activated_per_mode(
-            param_set,
-            ad,
-            temperature,
-            pressure,
-            velocity,
-            q,
-        ) ./ mode_Ns
+    return (; ad, temperature, pressure, velocity, q, mode_Ns)
+end
+
+function get_ARG_S_max(data_row::NamedTuple, num_modes::Integer)
+    (; ad, temperature, pressure, velocity, q) =
+        convert_to_ARG_params(data_row, num_modes)
     max_supersaturation = AA.max_supersaturation(
         param_set,
         ad,
@@ -74,26 +71,84 @@ function ARG_scheme(data_row::NamedTuple, num_modes)
         velocity,
         q,
     )
-    # critical_supersaturation =
-    #     AA.critical_supersaturation(param_set, ad, temperature)
-    # act_frac_per_mode_from_S_max =
-    #     AA.N_activated_per_mode(
-    #         param_set,
-    #         ad,
-    #         temperature,
-    #         pressure,
-    #         velocity,
-    #         q,
-    #         data_row.S_max,
-    #         critical_supersaturation,
-    #     ) ./ mode_Ns
-    return (; act_frac_per_mode, max_supersaturation)
+    return max_supersaturation
 end
 
-function read_aerosol_dataset(
-    dataset_filename::String,
-    keep_y_as_table::Bool = false,
+function get_ARG_S_max(X::DataFrame)
+    num_modes = get_num_modes(X)
+    return get_ARG_S_max.(NamedTuple.(eachrow(X)), num_modes)
+end
+
+function get_ARG_S_crit(data_row::NamedTuple, num_modes::Integer)
+    (; ad, temperature) = convert_to_ARG_params(data_row, num_modes)
+    return AA.critical_supersaturation(param_set, ad, temperature)
+end
+
+function get_ARG_S_crit(X::DataFrame)
+    num_modes = get_num_modes(X)
+    return get_ARG_S_crit.(NamedTuple.(eachrow(X)), num_modes)
+end
+
+function get_ARG_act_N(
+    data_row::NamedTuple,
+    num_modes::Integer,
+    S_max = nothing,
 )
+    (; ad, temperature, pressure, velocity, q) =
+        convert_to_ARG_params(data_row, num_modes)
+    if S_max === nothing
+        return collect(
+            AA.N_activated_per_mode(
+                param_set,
+                ad,
+                temperature,
+                pressure,
+                velocity,
+                q,
+            ),
+        )
+    else
+        critical_supersaturation =
+            AA.critical_supersaturation(param_set, ad, temperature)
+        return collect(
+            AA.N_activated_per_mode(
+                param_set,
+                ad,
+                temperature,
+                pressure,
+                velocity,
+                q,
+                S_max,
+                critical_supersaturation,
+            ),
+        )
+    end
+end
+
+function get_ARG_act_N(X::DataFrame, S_max = nothing)
+    num_modes = get_num_modes(X)
+    return transpose(
+        hcat(get_ARG_act_N.(NamedTuple.(eachrow(X)), num_modes, S_max)...),
+    )
+end
+
+function get_ARG_act_frac(
+    data_row::NamedTuple,
+    num_modes::Integer,
+    S_max = nothing,
+)
+    (; mode_Ns) = convert_to_ARG_params(data_row, num_modes)
+    return get_ARG_act_N(data_row, num_modes, S_max) ./ mode_Ns
+end
+
+function get_ARG_act_frac(X::DataFrame, S_max = nothing)
+    num_modes = get_num_modes(X)
+    return transpose(
+        hcat(get_ARG_act_frac.(NamedTuple.(eachrow(X)), num_modes, S_max)...),
+    )
+end
+
+function read_aerosol_dataset(dataset_filename::String)
     df = DF.DataFrame(CSV.File(dataset_filename))
     df = filter(row -> row.S_max > 0 && row.S_max < 0.2, df)
     selected_columns_X = []
@@ -114,25 +169,29 @@ function read_aerosol_dataset(
         [:velocity, :initial_temperature, :initial_pressure],
     )
     X = df[:, selected_columns_X]
-    if keep_y_as_table
-        Y = DF.select(
-            DF.transform(df, :S_max => ByRow(log) => :log_S_max),
-            :log_S_max,
-        )
-    else
-        Y = log.(df.S_max)
-    end
-    return (X, Y)
+    Y = get_ARG_act_frac(X, df.S_max)[:, 1] .- get_ARG_act_frac(X)[:, 1]
+    return (X, Y, df)
 end
 
 function preprocess_aerosol_data(X::DataFrame)
     num_modes = get_num_modes(X)
-    X = DF.transform(
-        X,
-        AsTable(All()) =>
-            ByRow(x -> log(ARG_scheme(x, num_modes).max_supersaturation)) =>
-                :log_ARG_S_max,
-    )
+    # X = DF.transform(
+    #     X,
+    #     AsTable(All()) =>
+    #         ByRow(x -> log(get_ARG_S_max(x, num_modes))) => :log_ARG_S_max,
+    # )
+    # X = DF.transform(
+    #     X,
+    #     AsTable(All()) =>
+    #         ByRow(x -> log.(get_ARG_S_crit(x, num_modes))) =>
+    #             [Symbol("mode_$(i)_log_ARG_S_crit") for i in 1:num_modes],
+    # )
+    # X = DF.transform(
+    #     X,
+    #     AsTable(All()) =>
+    #         ByRow(x -> get_ARG_act_frac(x, num_modes)) =>
+    #             [Symbol("mode_$(i)_ARG_act_frac") for i in 1:num_modes],
+    # )
     for i in 1:num_modes
         X = DF.transform(
             X,

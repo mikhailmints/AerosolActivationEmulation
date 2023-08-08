@@ -28,6 +28,7 @@ class MyParcelSimulation:
         scipy_rtol=1e-13,
         rtol_thd=1e-10,
         rtol_x=1e-10,
+        rtol_equilibrate=1e-10,
         dt_cond_range=(1e-3 * si.second, 10 * si.second),
         equilibrate=True,
         early_stop=True,
@@ -78,7 +79,7 @@ class MyParcelSimulation:
                 r_dry=settings.formulae.trivia.radius(volume=attributes["dry volume"]),
                 environment=env,
                 kappa_times_dry_volume=attributes["kappa times dry volume"],
-                rtol=1e-10,
+                rtol=rtol_equilibrate,
             )
             attributes["volume"] = settings.formulae.trivia.volume(radius=r_wet)
         else:
