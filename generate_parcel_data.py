@@ -10,7 +10,7 @@ from my_parcel_settings import MyParcelSettings
 from PySDM.physics import si
 
 
-N_SD = 1000
+N_SD = 100
 DZ_PARCEL = 10 * si.m
 Z_MAX_PARCEL = 1000 * si.m
 INITIAL_RH = 0.99
@@ -80,7 +80,7 @@ def run_simulation(simulation):
         )()
     else:
         assert Z_MAX_PARCEL < np.inf
-    return simulation.run()
+        return simulation.run()
 
 
 # Run one parcel simulation, output the data for all timesteps
@@ -93,7 +93,7 @@ def generate_data_one_simulation(
     initial_temperature,
     initial_pressure,
 ):
-    initial_params = {
+    metadata = {
         k: v
         for d in (
             {
@@ -126,15 +126,19 @@ def generate_data_one_simulation(
         initial_pressure=initial_pressure,
         dt=dt,
         t_max=t_max,
-        n_sd_per_mode=N_SD,
+        n_sd_per_mode=N_SD // len(mode_Ns),
         initial_relative_humidity=INITIAL_RH,
     )
 
-    initial_params["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
+    metadata["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
+
+    success = True
+
+    start_wall_time = time.time()
 
     try:
         simulation = MyParcelSimulation(settings)
-        initial_params["solver"] = "PySDM"
+        metadata["solver"] = "PySDM"
         try:
             results = run_simulation(simulation)
         except RuntimeError as err:
@@ -143,32 +147,35 @@ def generate_data_one_simulation(
                 settings,
                 scipy_solver=True,
             )
-            initial_params["solver"] = "SciPy"
+            metadata["solver"] = "SciPy"
             results = run_simulation(simulation)
+        products = results["products"]
+        metadata["reached_z_max"] = results["reached_t_max"]
     except Exception as err:
         process_print(f"{type(err).__name__}: {err}")
-        initial_params["error"] = str(err).strip("\"'")
-        result = pd.DataFrame(initial_params, index=[0])
-        return result, False
-
-    initial_params["reached_z_max"] = results["reached_t_max"]
-
-    products = results["products"]
+        metadata["error"] = str(err).strip("\"'")
+        products = simulation.get_output()
+        success = False
+    
+    metadata["wall_time"] = time.time() - start_wall_time
+    
     n_rows = len(list(products.values())[0])
 
-    saturation_mask = products["S_max"] >= 0
-    if np.any(saturation_mask):
-        initial_params["saturation_temperature"] = products["T"][saturation_mask][0]
-        initial_params["saturation_pressure"] = products["p"][saturation_mask][0]
+    if n_rows > 0:
+        saturation_mask = products["S_max"] >= 0
+        if np.any(saturation_mask):
+            metadata["saturation_temperature"] = products["T"][saturation_mask][0]
+            metadata["saturation_pressure"] = products["p"][saturation_mask][0]
+        else:
+            metadata["saturation_temperature"] = np.nan
+            metadata["saturation_pressure"] = np.nan
+        result = pd.DataFrame(
+            {k: [metadata[k]] * n_rows for k in metadata.keys()} | products
+        )
     else:
-        initial_params["saturation_temperature"] = np.nan
-        initial_params["saturation_pressure"] = np.nan
+        result = pd.DataFrame(metadata, index=[0])
 
-    result = pd.DataFrame(
-        {k: [initial_params[k]] * n_rows for k in initial_params.keys()} | products
-    )
-
-    return result, True
+    return result, success
 
 
 def generate_data(
@@ -181,21 +188,16 @@ def generate_data(
     for i in range(len(parameters)):
         process_print(f"Simulation {i + 1} / {num_simulations}")
         velocity, initial_temperature, initial_pressure = parameters[i][-3:]
-        mode_Ns_or_vol_fracs, mode_means, mode_stdevs, mode_kappas = (
+        mode_Ns_or_NsMeans, mode_means, mode_stdevs, mode_kappas = (
             parameters[i][:-3].reshape(-1, 4).T
         )
         if convert_units:
-            mode_vol_fracs = 10**mode_Ns_or_vol_fracs
+            mode_NsMeans = 10**mode_Ns_or_NsMeans
             mode_means = 10**mode_means
             velocity = 10**velocity
-            # Use 3rd moment of lognormal distribution to convert volume fraction
-            # to number concentration
-            mode_Ns = mode_vol_fracs / (
-                (4 / 3 * np.pi)
-                * np.exp(3 * np.log(mode_means) + 0.5 * 9 * np.log(mode_stdevs) ** 2)
-            )
+            mode_Ns = mode_NsMeans / mode_means
         else:
-            mode_Ns = mode_Ns_or_vol_fracs
+            mode_Ns = mode_Ns_or_NsMeans
         simulation_df, success = generate_data_one_simulation(
             mode_Ns=mode_Ns,
             mode_means=mode_means,
@@ -237,5 +239,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as err:
-        process_print(err)
+        process_print(f"{type(err).__name__}: {err}")
         raise

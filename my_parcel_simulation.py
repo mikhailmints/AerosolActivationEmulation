@@ -111,6 +111,24 @@ class MyParcelSimulation:
                 [] for _ in range(self.particulator.n_sd)
             ),
         }
+
+        self.output = {
+            k: []
+            for k in itertools.chain(
+                self.particulator.products,
+                *(
+                    (
+                        f"mode_{i + 1}_act_frac_S",
+                        f"mode_{i + 1}_act_frac_S_interp",
+                        f"mode_{i + 1}_act_frac_V",
+                        f"mode_{i + 1}_wet_radius_mean",
+                        f"mode_{i + 1}_wet_radius_stdev",
+                    )
+                    for i in range(self.num_modes)
+                ),
+            )
+        }
+
         self.settings = settings
         self.early_stop = early_stop
         self.max_iterations_without_increasing_smax = (
@@ -123,13 +141,11 @@ class MyParcelSimulation:
     def __sanity_checks(self, attributes, volume):
         for attribute in attributes.values():
             assert attribute.shape[0] == self.particulator.n_sd
-        # np.testing.assert_approx_equal(
-        #     sum(attributes["n"]) / volume,
-        #     sum(mode.norm_factor for _, mode in self.settings.aerosol_modes_by_kappa),
-        #     significant=4,
-        # )
 
-    def _save(self, output):
+    def get_output(self):
+        return {k: np.array(v) for k, v in self.output.items()}
+
+    def _save(self):
         for key, attr in self.output_attributes.items():
             attr_data = self.particulator.attributes[key].to_ndarray()
             for drop_id in range(self.particulator.n_sd):
@@ -138,13 +154,13 @@ class MyParcelSimulation:
             value = v.get()
             if isinstance(value, np.ndarray) and value.shape[0] == 1:
                 value = value[0]
-            output[k].append(value)
-        if np.isnan(output["S_max"][-1]):
-            output["S_max"][-1] = output["RH"][-1] - 1
+            self.output[k].append(value)
+        if np.isnan(self.output["S_max"][-1]):
+            self.output["S_max"][-1] = self.output["RH"][-1] - 1
         act_num_S = np.zeros(self.num_modes)
         act_num_V = np.zeros(self.num_modes)
         total_multiplicity = np.zeros(self.num_modes)
-        max_RH = 1 + np.max(output["S_max"])
+        max_RH = 1 + np.max(self.output["S_max"])
         volumes = np.array(
             [
                 np.array(self.output_attributes["volume"])[self.mode_ids == i, -1]
@@ -152,61 +168,97 @@ class MyParcelSimulation:
             ]
         )
         radii = self.settings.formulae.trivia.radius(volumes)
+        highest_critsat_activated = [None] * self.num_modes
+        highest_critsat_activated_id = [None] * self.num_modes
+        lowest_critsat_unactivated = [None] * self.num_modes
+        lowest_critsat_unactivated_id = [None] * self.num_modes
+        get_critsat = lambda drop_id: self.output_attributes[
+            "critical supersaturation"
+        ][drop_id][-1]
         for drop_id in range(self.particulator.n_sd):
+            mode_id = self.mode_ids[drop_id]
             multiplicity = self.output_attributes["n"][drop_id][-1]
-            total_multiplicity[self.mode_ids[drop_id]] += multiplicity
-            if self.output_attributes["critical supersaturation"][drop_id][-1] < max_RH:
-                act_num_S[self.mode_ids[drop_id]] += multiplicity
+            total_multiplicity[mode_id] += multiplicity
+            if get_critsat(drop_id) < max_RH:
+                if (
+                    highest_critsat_activated_id[mode_id] is None
+                    or get_critsat(drop_id) > highest_critsat_activated[mode_id]
+                ):
+                    highest_critsat_activated[mode_id] = get_critsat(drop_id)
+                    highest_critsat_activated_id[mode_id] = drop_id
+                act_num_S[mode_id] += multiplicity
+            elif (
+                lowest_critsat_unactivated_id[mode_id] is None
+                or get_critsat(drop_id) < lowest_critsat_unactivated[mode_id]
+            ):
+                lowest_critsat_unactivated[mode_id] = get_critsat(drop_id)
+                lowest_critsat_unactivated_id[mode_id] = drop_id
             if (
                 self.output_attributes["critical volume"][drop_id][-1]
                 < self.output_attributes["volume"][drop_id][-1]
             ):
-                act_num_V[self.mode_ids[drop_id]] += multiplicity
+                act_num_V[mode_id] += multiplicity
+        # Interpolate activated fraction between highest critical supersaturation
+        # droplet activated and lowest critical supersaturation droplet unactivated
+        act_num_S_interp = [
+            (
+                act_num_S[i]
+                + (
+                    (max_RH - (highest_critsat_activated[i]))
+                    / (lowest_critsat_unactivated[i] - highest_critsat_activated[i])
+                )
+                * self.output_attributes["n"][lowest_critsat_unactivated_id[i]][-1]
+            )
+            if highest_critsat_activated_id[i] and lowest_critsat_unactivated_id[i]
+            else act_num_S[i]
+            for i in range(self.num_modes)
+        ]
         for i in range(self.num_modes):
-            output[f"mode_{i + 1}_act_frac_S"].append(
+            self.output[f"mode_{i + 1}_act_frac_S"].append(
                 act_num_S[i] / total_multiplicity[i]
             )
-            output[f"mode_{i + 1}_act_frac_V"].append(
+            self.output[f"mode_{i + 1}_act_frac_S_interp"].append(
+                act_num_S_interp[i] / total_multiplicity[i]
+            )
+            self.output[f"mode_{i + 1}_act_frac_V"].append(
                 act_num_V[i] / total_multiplicity[i]
             )
-            output[f"mode_{i + 1}_wet_radius_mean"].append(scipy.stats.gmean(radii[i]))
-            output[f"mode_{i + 1}_wet_radius_stdev"].append(scipy.stats.gstd(radii[i]))
+            self.output[f"mode_{i + 1}_wet_radius_mean"].append(
+                scipy.stats.gmean(radii[i])
+            )
+            self.output[f"mode_{i + 1}_wet_radius_stdev"].append(
+                scipy.stats.gstd(radii[i])
+            )
 
     def run(self):
-        output = {
-            k: []
-            for k in itertools.chain(
-                self.particulator.products,
-                *(
-                    (
-                        f"mode_{i + 1}_act_frac_S",
-                        f"mode_{i + 1}_act_frac_V",
-                        f"mode_{i + 1}_wet_radius_mean",
-                        f"mode_{i + 1}_wet_radius_stdev",
-                    )
-                    for i in range(self.num_modes)
-                ),
-            )
-        }
         reached_t_max = False
         while True:
             self.particulator.run(steps=1)
-            self._save(output)
+            self._save()
             if self.console:
-                print(f"S_max: {output['S_max'][-1]}")
-            if output["time"][-1] > self.settings.t_max:
+                print(f"S_max: {self.output['S_max'][-1]}")
+            if self.output["time"][-1] > self.settings.t_max:
                 reached_t_max = True
                 break
-            if (
-                self.early_stop
-                and np.max(output["S_max"]) > 0
-                and np.argmax(output["S_max"])
-                < len(output["S_max"]) - self.max_iterations_without_increasing_smax
-            ):
-                break
-        output = {k: np.array(v) for k, v in output.items()}
+            if self.early_stop:
+                # Went past supersaturation peak
+                if (
+                    np.max(self.output["S_max"]) > 0
+                    and np.argmax(self.output["S_max"])
+                    < len(self.output["S_max"])
+                    - self.max_iterations_without_increasing_smax
+                ):
+                    break
+                # Everything was activated
+                if all(
+                    [
+                        self.output[f"mode_{i + 1}_act_frac_S"] == 1
+                        for i in range(self.num_modes)
+                    ]
+                ):
+                    break
         return {
-            "products": output,
+            "products": self.get_output(),
             "attributes": self.output_attributes,
             "reached_t_max": reached_t_max,
         }
