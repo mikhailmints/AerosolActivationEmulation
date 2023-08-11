@@ -169,7 +169,7 @@ function read_aerosol_dataset(dataset_filename::String)
         [:velocity, :initial_temperature, :initial_pressure],
     )
     X = df[:, selected_columns_X]
-    Y = get_ARG_act_frac(X, df.S_max)[:, 1] .- get_ARG_act_frac(X)[:, 1]
+    Y = get_ARG_act_frac(X, df.S_max)[:, 1]
     return (X, Y, df)
 end
 
@@ -186,12 +186,12 @@ function preprocess_aerosol_data(X::DataFrame)
     #         ByRow(x -> log.(get_ARG_S_crit(x, num_modes))) =>
     #             [Symbol("mode_$(i)_log_ARG_S_crit") for i in 1:num_modes],
     # )
-    # X = DF.transform(
-    #     X,
-    #     AsTable(All()) =>
-    #         ByRow(x -> get_ARG_act_frac(x, num_modes)) =>
-    #             [Symbol("mode_$(i)_ARG_act_frac") for i in 1:num_modes],
-    # )
+    X = DF.transform(
+        X,
+        AsTable(All()) =>
+            ByRow(x -> get_ARG_act_frac(x, num_modes)) =>
+                [Symbol("mode_$(i)_ARG_act_frac") for i in 1:num_modes],
+    )
     for i in 1:num_modes
         X = DF.transform(
             X,
@@ -205,4 +205,12 @@ function preprocess_aerosol_data(X::DataFrame)
     end
     X = DF.transform(X, :velocity => ByRow(log) => :velocity)
     return X
+end
+
+function target_transform(act_frac)
+    return @. atanh(2.0 * 0.99 * (act_frac - 0.5))
+end
+
+function inverse_target_transform(transformed_act_frac)
+    return @. (1.0 / (2.0 * 0.99)) * tanh(transformed_act_frac) + 0.5
 end

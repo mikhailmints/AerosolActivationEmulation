@@ -96,6 +96,7 @@ def generate_data_one_simulation(
     dz_parcel=DZ_PARCEL,
     z_max_parcel=Z_MAX_PARCEL,
     initial_rh=INITIAL_RH,
+    return_sim = False
 ):
     metadata = {
         k: v
@@ -140,6 +141,8 @@ def generate_data_one_simulation(
 
     start_wall_time = time.time()
 
+    simulation = None
+
     try:
         simulation = MyParcelSimulation(settings)
         metadata["solver"] = "PySDM"
@@ -179,7 +182,10 @@ def generate_data_one_simulation(
     else:
         result = pd.DataFrame(metadata, index=[0])
 
-    return result, success
+    if return_sim:
+        return result, success, simulation
+    else:
+        return result, success
 
 
 def generate_data(

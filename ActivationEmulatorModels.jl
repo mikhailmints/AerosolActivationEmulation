@@ -7,6 +7,7 @@ import Optim
 import QuasiMonteCarlo
 import Distributions
 import SpecialFunctions
+import DataFrames as DF
 
 Standardizer = MLJ.@load Standardizer pkg = MLJModels
 EvoTreeRegressor = MLJ.@load EvoTreeRegressor pkg = EvoTrees
@@ -79,33 +80,30 @@ end
 function MLJ.fit(model::MyGPRegressor, verbosity, X, y)
     @info "Training GP model"
     gps = []
-    for i in 1:1
+    for i in 1:20
         @info "Iteration $(i)"
-        # weights = StatsBase.Weights([
-        #     Distributions.pdf(Distributions.Normal(0.0, 0.5), x) for
-        #     x in X.mode_1_ARG_act_frac
-        # ])
+        weights = StatsBase.Weights([
+            Distributions.pdf(Distributions.Normal(0.0, 1.0), x) for
+            x in X.mode_1_ARG_act_frac
+        ])
         inds1 = StatsBase.sample(
             1:DF.nrow(X),
-            #weights,
-            1000,
+            weights,
+            100,
             replace = false,
-            ordered = true,
         )
         inds2 = StatsBase.sample(
             1:DF.nrow(X),
-            #weights,
-            50,
+            weights,
+            10,
             replace = false,
-            ordered = true,
         )
-        gp = GaussianProcesses.SoR(
-            Matrix(X)',
-            Matrix(X[inds2, :])',
-            y,
-            GaussianProcesses.MeanZero(),
-            GaussianProcesses.Mat52Ard(fill(2.0, DF.ncol(X)), 0.0),
-            2.0,
+        gp = GaussianProcesses.GPA(
+            Matrix(X[inds1, :])',
+            y[inds1],
+            GaussianProcesses.MeanConst(StatsBase.mean(y)),
+            GaussianProcesses.SEArd(fill(4.0, DF.ncol(X)), 0.0),
+            GaussianProcesses.GaussLik(2.0),
         )
         GaussianProcesses.optimize!(gp)
         push!(gps, gp)
@@ -114,7 +112,11 @@ function MLJ.fit(model::MyGPRegressor, verbosity, X, y)
 end
 
 function MLJ.predict(::MyGPRegressor, fitresult, Xnew)
-    return StatsBase.mean([
+    means = reduce(hcat, [
         GaussianProcesses.predict_f(gp, Matrix(Xnew)')[1] for gp in fitresult
     ])
+    variances = reduce(hcat, [
+        GaussianProcesses.predict_f(gp, Matrix(Xnew)')[2] for gp in fitresult
+    ])
+    return (sum(means ./ variances, dims = 2) ./ sum(1.0 ./ variances, dims = 2))[:,1]
 end
