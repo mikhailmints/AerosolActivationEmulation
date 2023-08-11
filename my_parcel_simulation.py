@@ -29,7 +29,7 @@ class MyParcelSimulation:
         rtol_thd=1e-10,
         rtol_x=1e-10,
         rtol_equilibrate=1e-10,
-        dt_cond_range=(1e-3 * si.second, 10 * si.second),
+        dt_cond_range=(1e-3 * si.second, 1 * si.second),
         equilibrate=True,
         early_stop=True,
         max_iterations_without_increasing_smax=5,
@@ -121,6 +121,7 @@ class MyParcelSimulation:
                         f"mode_{i + 1}_act_frac_S",
                         f"mode_{i + 1}_act_frac_S_interp",
                         f"mode_{i + 1}_act_frac_V",
+                        f"mode_{i + 1}_smallest_dry_radius_activated",
                         f"mode_{i + 1}_wet_radius_mean",
                         f"mode_{i + 1}_wet_radius_stdev",
                     )
@@ -222,6 +223,13 @@ class MyParcelSimulation:
             )
             self.output[f"mode_{i + 1}_act_frac_V"].append(
                 act_num_V[i] / total_multiplicity[i]
+            )
+            self.output[f"mode_{i + 1}_smallest_dry_radius_activated"].append(
+                self.settings.formulae.trivia.radius(
+                    self.particulator.attributes["dry volume"][
+                        highest_critsat_activated_id[i]
+                    ][-1]
+                )
             )
             self.output[f"mode_{i + 1}_wet_radius_mean"].append(
                 scipy.stats.gmean(radii[i])

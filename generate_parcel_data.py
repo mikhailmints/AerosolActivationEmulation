@@ -11,9 +11,9 @@ from PySDM.physics import si
 
 
 N_SD = 100
-DZ_PARCEL = 10 * si.m
+DZ_PARCEL = 1 * si.m
 Z_MAX_PARCEL = 1000 * si.m
-INITIAL_RH = 0.99
+INITIAL_RH = 1
 
 # this is here for testing functions from outside without command-line args
 SIMULATION_TIMEOUT = None
@@ -92,6 +92,10 @@ def generate_data_one_simulation(
     velocity,
     initial_temperature,
     initial_pressure,
+    n_sd=N_SD,
+    dz_parcel=DZ_PARCEL,
+    z_max_parcel=Z_MAX_PARCEL,
+    initial_rh=INITIAL_RH,
 ):
     metadata = {
         k: v
@@ -113,8 +117,8 @@ def generate_data_one_simulation(
         "initial_pressure": initial_pressure,
     }
 
-    dt = DZ_PARCEL / velocity
-    t_max = Z_MAX_PARCEL / velocity
+    dt = dz_parcel / velocity
+    t_max = z_max_parcel / velocity
 
     settings = MyParcelSettings(
         mode_Ns=mode_Ns,
@@ -126,8 +130,8 @@ def generate_data_one_simulation(
         initial_pressure=initial_pressure,
         dt=dt,
         t_max=t_max,
-        n_sd_per_mode=N_SD // len(mode_Ns),
-        initial_relative_humidity=INITIAL_RH,
+        n_sd_per_mode=n_sd // len(mode_Ns),
+        initial_relative_humidity=initial_rh,
     )
 
     metadata["initial_vapor_mix_ratio"] = settings.initial_vapour_mixing_ratio
@@ -156,9 +160,9 @@ def generate_data_one_simulation(
         metadata["error"] = str(err).strip("\"'")
         products = simulation.get_output()
         success = False
-    
+
     metadata["wall_time"] = time.time() - start_wall_time
-    
+
     n_rows = len(list(products.values())[0])
 
     if n_rows > 0:
