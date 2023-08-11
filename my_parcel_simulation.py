@@ -224,13 +224,18 @@ class MyParcelSimulation:
             self.output[f"mode_{i + 1}_act_frac_V"].append(
                 act_num_V[i] / total_multiplicity[i]
             )
-            self.output[f"mode_{i + 1}_smallest_dry_radius_activated"].append(
-                self.settings.formulae.trivia.radius(
-                    self.particulator.attributes["dry volume"][
-                        highest_critsat_activated_id[i]
-                    ][-1]
+            if highest_critsat_activated_id[i] is not None:
+                self.output[f"mode_{i + 1}_smallest_dry_radius_activated"].append(
+                    self.settings.formulae.trivia.radius(
+                        self.particulator.attributes["dry volume"][
+                            highest_critsat_activated_id[i]
+                        ]
+                    )
                 )
-            )
+            else:
+                self.output[f"mode_{i + 1}_smallest_dry_radius_activated"].append(
+                    np.nan
+                )
             self.output[f"mode_{i + 1}_wet_radius_mean"].append(
                 scipy.stats.gmean(radii[i])
             )

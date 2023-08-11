@@ -19,10 +19,8 @@ FAIL_FILE="datasets/${OUT_NAME}_fail.csv"
 
 echo "Starting job"
 
-echo "OUT_NAME: $OUT_NAME"
-echo "NUM_SIM: $NUM_SIM"
-echo "NUM_MODES: $NUM_MODES"
 echo "NPROCS: $SLURM_NPROCS"
+echo "NUM_SIM: $NUM_SIM"
 
 # Remove any previous temp files, create new temp directories
 rm -rf datasets/temp/

@@ -2,7 +2,7 @@
 Adapted from PySDM_examples.Pyrcel
 """
 
-from typing import Iterable, Tuple
+from typing import Iterable
 
 import numpy as np
 from pystrict import strict
