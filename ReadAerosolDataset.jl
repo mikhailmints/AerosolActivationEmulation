@@ -12,9 +12,9 @@ function get_num_modes(df::DataFrame)
     end
 end
 
-function read_aerosol_dataset(dataset_filename::String)
-    df = DF.DataFrame(CSV.File(dataset_filename))
-    df = filter(row -> row.S_max > 0 && row.S_max < 0.2, df)
+function read_aerosol_dataset(dataset_filename::String, Y_name = :mode_1_act_frac_S_interp)
+    initial_data = DF.DataFrame(CSV.File(dataset_filename))
+    df = filter(row -> row.S_max > 0 && row.S_max < 0.2, initial_data)
     selected_columns_X = []
     num_modes = get_num_modes(df)
     for i in 1:num_modes
@@ -33,6 +33,6 @@ function read_aerosol_dataset(dataset_filename::String)
         [:velocity, :initial_temperature, :initial_pressure],
     )
     X = df[:, selected_columns_X]
-    Y = df.mode_1_act_frac_S_interp
-    return (X, Y, df)
+    Y = df[:, Y_name]
+    return (X, Y, initial_data)
 end

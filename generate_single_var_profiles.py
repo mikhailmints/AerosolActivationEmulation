@@ -88,7 +88,7 @@ profiles = {
         ]
         for mode_2_mean in np.geomspace(1e-3 * si.um, 1e1 * si.um, NUM_PTS)
     ],
-    "ARG2000_Fig7_velocity": [
+    "ARG2000_Fig7a_velocity": [
         [
             100 / si.cm**3,
             0.2 * si.um,
@@ -104,6 +104,22 @@ profiles = {
         ]
         for velocity in np.geomspace(1e-2 * si.m / si.s, 1e1 * si.m / si.s, NUM_PTS)
     ],
+    "ARG2000_Fig7b_velocity": [
+        [
+            100 / si.cm**3,
+            0.02 * si.um,
+            2,
+            0.54,
+            100 / si.cm**3,
+            0.2 * si.um,
+            2,
+            0.54,
+            velocity,
+            294 * si.K,
+            100000 * si.Pa,
+        ]
+        for velocity in np.geomspace(1e-2 * si.m / si.s, 1e1 * si.m / si.s, NUM_PTS)
+    ]
 }
 
 for name, parameters in profiles.items():

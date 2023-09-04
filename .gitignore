@@ -5,3 +5,4 @@ __ptx_cache__.db
 slurm.out
 slurm.err
 testing_notebooks
+Manifest.toml
